@@ -10,7 +10,7 @@ from .projectors import create_intrinsic_model
 
 def create_model(model_name=None, num_classes=None, base_width=None, in_chans=None,
                  seed=None, intrinsic_dim=0, intrinsic_mode='sparse',
-                 cfg_path=None, transfer=False, device_id=None, log_dir=None):
+                 cfg_path=None, transfer=False, device_id=None, log_dir=None, exp_name='tmp'):
     device = torch.device(f'cuda:{device_id}') if isinstance(device_id, int) else None
 
     ## Prepare configurations.
@@ -55,8 +55,8 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
     base_net = base_net.to(device)
     if log_dir is not None:
         ## Save initialization.
-        torch.save(base_net.state_dict(), Path(log_dir) / 'init_model.pt')
-        logging.info(f'Saved base model at "{Path(log_dir) / "init_model.pt"}".')
+        torch.save(base_net.state_dict(), Path(log_dir) / exp_name / 'init_model.pt')
+        logging.info(f'Saved base model at "{Path(log_dir) / exp_name / "init_model.pt"}".')
 
     ## Create intrinsic dimensionality model.
     final_net = base_net if intrinsic_cfg is None else \
@@ -70,9 +70,9 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
         dump_cfg = dict(**net_cfg)
         if intrinsic_cfg is not None:
             dump_cfg['intrinsic'] = intrinsic_cfg
-        with open(Path(log_dir) / 'net.cfg.yml', 'w') as f:
+        with open(Path(log_dir) / exp_name / 'net.cfg.yml', 'w') as f:
             yaml.safe_dump(dump_cfg, f, indent=2)
-        logging.info(f'Saved net configuration at "{Path(log_dir) / "net.cfg.yml"}".')
+        logging.info(f'Saved net configuration at "{Path(log_dir) / exp_name / "net.cfg.yml"}".')
 
         wandb.config.update({**net_cfg, **(intrinsic_cfg or dict())})
         wandb.save('*.yml')

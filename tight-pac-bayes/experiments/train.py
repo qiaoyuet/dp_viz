@@ -1,4 +1,5 @@
 import logging
+import os.path
 from pathlib import Path
 from tqdm.auto import tqdm
 import torch
@@ -46,7 +47,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          cfg_path=None, transfer=False, model_name='resnet18k', base_width=None,
          batch_size=128, optimizer='adam', lr=1e-3, momentum=.9, weight_decay=5e-4, epochs=0,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
-         warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=1.0, dp_C=1.0):
+         warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=1.0, dp_C=1.0, dp_noise=1.0,
+         ckpt_every=[], exp_name='tmp'):
     random_seed_all(seed)
 
     train_data, test_data = get_dataset(
@@ -61,18 +63,27 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers,
                              sampler=DistributedSampler(test_data) if distributed else None)
 
+    if log_dir is not None:
+        ckpt_path = os.path.join(log_dir, exp_name)
+        if not os.path.exists(ckpt_path):
+            os.mkdir(ckpt_path)
+
     net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
                        base_width=base_width,
                        seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
-                       cfg_path=cfg_path, transfer=transfer, device_id=device_id, log_dir=log_dir)
+                       cfg_path=cfg_path, transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name)
     if distributed:
         # net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device_id], broadcast_buffers=True)
 
-    if not non_private:
-        errors = ModuleValidator.validate(net, strict=False)
-        print(errors)
-        net = ModuleValidator.fix(net)
+    # if not non_private:
+    #     errors = ModuleValidator.validate(net, strict=False)
+    #     print(errors)
+    #     net = ModuleValidator.fix(net)
+    # use same model for priv and non-priv training
+    errors = ModuleValidator.validate(net, strict=False)
+    print(errors)
+    net = ModuleValidator.fix(net)
 
     criterion = nn.CrossEntropyLoss()
     if optimizer == 'sgd':
@@ -120,16 +131,23 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     if not non_private:
         # Privacy engine
         privacy_engine = PrivacyEngine()
-        model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
+        # model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
+        #     module=net,
+        #     optimizer=optimizer,
+        #     data_loader=train_loader,
+        #     epochs=epochs,
+        #     target_epsilon=target_epsilon,
+        #     target_delta=1e-5,
+        #     max_grad_norm=dp_C,
+        # )
+        # print(f"Using sigma={optimizer.noise_multiplier} and C={dp_C}")
+        model, optimizer, train_loader = privacy_engine.make_private(
             module=net,
             optimizer=optimizer,
             data_loader=train_loader,
-            epochs=epochs,
-            target_epsilon=target_epsilon,
-            target_delta=1e-5,
+            noise_multiplier=dp_noise,
             max_grad_norm=dp_C,
         )
-        print(f"Using sigma={optimizer.noise_multiplier} and C={dp_C}")
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
@@ -148,6 +166,18 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
             logging.info(train_metrics, extra=dict(wandb=True, prefix='sgd/train'))
             logging.info(test_metrics, extra=dict(wandb=True, prefix='sgd/test'))
 
+            if not non_private:
+                logging.info({'dp_epsilon': privacy_engine.get_epsilon(delta=1e-5)},
+                             extra=dict(wandb=True, prefix='sgd/train'))
+
+            # ckpt_path = os.path.join(log_dir, exp_name)
+            # if not os.path.exists(ckpt_path):
+            #     os.mkdir(ckpt_path)
+
+            # save intermediate ckpts
+            if len(ckpt_every) > 0 and e in ckpt_every:
+                torch.save(net.state_dict(), Path(log_dir) / exp_name / 'interm_model_e{}.pt'.format(e))
+
             if test_metrics['acc'] > best_acc_so_far:
                 best_acc_so_far = test_metrics['acc']
 
@@ -156,9 +186,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 wandb.run.summary['sgd/train/best_acc'] = train_metrics['acc']
                 logging.info(f"Epoch {e}: {train_metrics['acc']:.4f} (Train) / {best_acc_so_far:.4f} (Test)")
 
-                torch.save(net.state_dict(), Path(log_dir) / 'best_sgd_model.pt')
+                torch.save(net.state_dict(), Path(log_dir) / exp_name / 'best_sgd_model.pt')
 
-            torch.save(net.state_dict(), Path(log_dir) / 'sgd_model.pt')
+            torch.save(net.state_dict(), Path(log_dir) / exp_name / 'sgd_model.pt')
             wandb.save('*.pt')  ## NOTE: to upload immediately.
 
 
@@ -173,7 +203,7 @@ def entrypoint(log_dir=None, exp_group='tmp', exp_name='tmp', **kwargs):
     if rank == 0:
         logging.info(f'Working with {world_size} process(es).')
 
-    main(**kwargs, log_dir=log_dir, distributed=(world_size > 1), device_id=device_id)
+    main(**kwargs, log_dir=log_dir, distributed=(world_size > 1), device_id=device_id, exp_name=exp_name)
 
     if rank == 0:
         finish_logging()
