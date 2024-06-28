@@ -63,7 +63,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          cfg_path=None, transfer=False, model_name='resnet18k', base_width=None,
          batch_size=128, optimizer='adam', lr=1e-3, momentum=.9, weight_decay=5e-4, epochs=0,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
-         warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=1.0, dp_C=1.0, dp_noise=1.0,
+         warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
          dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp'):
     random_seed_all(seed)
 
@@ -143,23 +143,31 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     if not non_private:
         # Privacy engine
         privacy_engine = PrivacyEngine()
-        # model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
-        #     module=net,
-        #     optimizer=optimizer,
-        #     data_loader=train_loader,
-        #     epochs=epochs,
-        #     target_epsilon=target_epsilon,
-        #     target_delta=1e-5,
-        #     max_grad_norm=dp_C,
-        # )
-        # print(f"Using sigma={optimizer.noise_multiplier} and C={dp_C}")
-        model, optimizer, train_loader = privacy_engine.make_private(
-            module=net,
-            optimizer=optimizer,
-            data_loader=train_loader,
-            noise_multiplier=dp_noise,
-            max_grad_norm=dp_C,
-        )
+        if target_epsilon > 0 and dp_noise < 0:
+            model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
+                module=net,
+                optimizer=optimizer,
+                data_loader=train_loader,
+                epochs=epochs,
+                target_epsilon=target_epsilon,
+                target_delta=1e-5,
+                max_grad_norm=dp_C,
+            )
+            # print(f"Using sigma={optimizer.noise_multiplier} and C={dp_C}")
+            logging.info({'dp_noise': optimizer.noise_multiplier, 'dp_C': dp_C},
+                         extra=dict(wandb=True, prefix='sgd/train'))
+        elif dp_noise > 0 and target_epsilon < 0:
+            model, optimizer, train_loader = privacy_engine.make_private(
+                module=net,
+                optimizer=optimizer,
+                data_loader=train_loader,
+                noise_multiplier=dp_noise,
+                max_grad_norm=dp_C,
+            )
+            logging.info({'dp_noise': dp_noise, 'dp_C': dp_C},
+                         extra=dict(wandb=True, prefix='sgd/train'))
+        else:
+            raise ValueError('Either specify noise multiplier or target epsilon.')
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
