@@ -10,6 +10,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data.distributed import DistributedSampler
 from opacus.validators import ModuleValidator
 from opacus import PrivacyEngine
+from opacus.utils.batch_memory_manager import BatchMemoryManager
 
 from pactl.distributed import maybe_launch_distributed
 from pactl.logging import set_logging, wandb, finish_logging
@@ -22,24 +23,39 @@ from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
 
 
-def train(net, loader, criterion, optim, device=None, log_dir=None, epoch=None):
+def train(net, loader, criterion, optim, device=None, log_dir=None, epoch=None,
+          non_private=True, dp_virtual_batch_size=128):
     net.train()
 
-    for i, (X, Y) in tqdm(enumerate(loader), leave=False):
-        X, Y = X.to(device), Y.to(device)
+    if non_private:
+        for i, (X, Y) in tqdm(enumerate(loader), leave=False):
+            X, Y = X.to(device), Y.to(device)
+            optim.zero_grad()
+            f_hat = net(X)
+            loss = criterion(f_hat, Y)
+            loss.backward()
+            optim.step()
 
-        optim.zero_grad()
+            if log_dir is not None and i % 100 == 0:
+                metrics = {'epoch': epoch, 'mini_loss': loss.detach().item()}
+                logging.info(metrics, extra=dict(wandb=True, prefix='sgd/train'))
+    else:
+        with BatchMemoryManager(
+                data_loader=loader,
+                max_physical_batch_size=dp_virtual_batch_size,
+                optimizer=optim
+        ) as memory_safe_data_loader:
+            for i, (X, Y) in tqdm(enumerate(memory_safe_data_loader), leave=False):
+                X, Y = X.to(device), Y.to(device)
+                optim.zero_grad()
+                f_hat = net(X)
+                loss = criterion(f_hat, Y)
+                loss.backward()
+                optim.step()
 
-        f_hat = net(X)
-        loss = criterion(f_hat, Y)
-
-        loss.backward()
-
-        optim.step()
-
-        if log_dir is not None and i % 100 == 0:
-            metrics = {'epoch': epoch, 'mini_loss': loss.detach().item()}
-            logging.info(metrics, extra=dict(wandb=True, prefix='sgd/train'))
+                if log_dir is not None and i % 100 == 0:
+                    metrics = {'epoch': epoch, 'mini_loss': loss.detach().item()}
+                    logging.info(metrics, extra=dict(wandb=True, prefix='sgd/train'))
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
@@ -48,7 +64,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          batch_size=128, optimizer='adam', lr=1e-3, momentum=.9, weight_decay=5e-4, epochs=0,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=1.0, dp_C=1.0, dp_noise=1.0,
-         ckpt_every=[], exp_name='tmp'):
+         dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp'):
     random_seed_all(seed)
 
     train_data, test_data = get_dataset(
@@ -76,11 +92,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         # net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device_id], broadcast_buffers=True)
 
-    # if not non_private:
-    #     errors = ModuleValidator.validate(net, strict=False)
-    #     print(errors)
-    #     net = ModuleValidator.fix(net)
-    # use same model for priv and non-priv training
+    # removed if not non_private condition, use same model for priv and non-priv training
     errors = ModuleValidator.validate(net, strict=False)
     print(errors)
     net = ModuleValidator.fix(net)
@@ -154,7 +166,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         if distributed:
             train_loader.sampler.set_epoch(e)
 
-        train(net, train_loader, criterion, optimizer, device=device_id, log_dir=log_dir, epoch=e)
+        train(net, train_loader, criterion, optimizer, device=device_id,
+              log_dir=log_dir, epoch=e, non_private=non_private, dp_virtual_batch_size=dp_virtual_batch_size)
 
         if optim_scheduler is not None:
             optim_scheduler.step()
