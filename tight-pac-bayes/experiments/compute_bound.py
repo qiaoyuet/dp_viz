@@ -41,7 +41,8 @@ def main(
 
     net = create_model(cfg_path=prenet_cfg_path,
                        device_id=device_id,
-                       log_dir=log_dir)
+                       log_dir=log_dir,
+                       compute_bound=True)
     if distributed:
         net = torch.nn.parallel.DistributedDataParallel(net,
                                                         device_ids=[device_id],

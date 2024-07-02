@@ -11,7 +11,9 @@ from .projectors import create_intrinsic_model
 
 def create_model(model_name=None, num_classes=None, base_width=None, in_chans=None,
                  seed=None, intrinsic_dim=0, intrinsic_mode='sparse',
-                 cfg_path=None, ckpt_name=None, transfer=False, device_id=None, log_dir=None, exp_name='tmp'):
+                 cfg_path=None, ckpt_name=None, transfer=False, device_id=None, log_dir=None, exp_name='tmp',
+                 compute_bound=False
+                 ):
     device = torch.device(f'cuda:{device_id}') if isinstance(device_id, int) else None
 
     ## Prepare configurations.
@@ -26,10 +28,18 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
         if intrinsic_cfg is not None:
             net_cfg.pop('intrinsic')
 
+        if intrinsic_cfg is not None:
+            net_ckpt_file = 'init_model.pt'
+        elif ckpt_name is not None:
+            net_ckpt_file = net_cfg.get('ckpt_file', 'best_sgd_model.pt')
+        elif intrinsic_cfg is None and ckpt_name is None:
+            net_ckpt_file = net_cfg.get('ckpt_file', 'best_sgd_model.pt')
+        else:
+            raise ValueError
         # net_ckpt_file = 'init_model.pt' if intrinsic_cfg is not None else \
         #     net_cfg.get('ckpt_file', 'best_sgd_model.pt')
-        net_ckpt_file = 'init_model.pt' if intrinsic_cfg is not None else \
-            net_cfg.get('ckpt_file', '{}.pt'.format(ckpt_name))
+        # net_ckpt_file = 'init_model.pt' if intrinsic_cfg is not None else \
+        #     net_cfg.get('ckpt_file', '{}.pt'.format(ckpt_name))
         base_ckpt_path = Path(cfg_path).parent / net_ckpt_file
 
         id_ckpt_file = net_cfg.get('ckpt_file', 'best_sgd_model.pt') if intrinsic_cfg is not None else \
@@ -45,18 +55,20 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
         intrinsic_cfg = dict(intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode, seed=seed)
 
     ## Load base model.
-    # base_net = timm.create_model(**net_cfg, checkpoint_path=base_ckpt_path)
-    # load model with corrected modules from opacus
-    if base_ckpt_path is not None:
-        base_net = timm.create_model(**net_cfg, checkpoint_path=None)
-        base_net = ModuleValidator.fix(base_net)
-        base_net.load_state_dict(torch.load(base_ckpt_path))
-        logging.info(f'Loaded base model from "{base_ckpt_path}".')
+    if compute_bound:
+        base_net = timm.create_model(**net_cfg, checkpoint_path=base_ckpt_path)
     else:
-        base_net = timm.create_model(**net_cfg, checkpoint_path=None)
+        # load model with corrected modules from opacus
+        if base_ckpt_path is not None:
+            base_net = timm.create_model(**net_cfg, checkpoint_path=None)
+            base_net = ModuleValidator.fix(base_net)
+            base_net.load_state_dict(torch.load(base_ckpt_path))
+            logging.info(f'Loaded base model from "{base_ckpt_path}".')
+        else:
+            base_net = timm.create_model(**net_cfg, checkpoint_path=None)
 
     ## removed if not non_private condition, use same model for priv and non-priv training
-    if not transfer:
+    if not transfer and not compute_bound:
         errors = ModuleValidator.validate(base_net, strict=False)
         print(errors)
         base_net = ModuleValidator.fix(base_net)
