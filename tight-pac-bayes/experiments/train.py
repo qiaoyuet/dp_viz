@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 from torch.optim import SGD, Adam, RMSprop, AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data.distributed import DistributedSampler
-from opacus.validators import ModuleValidator
 from opacus import PrivacyEngine
 from opacus.utils.batch_memory_manager import BatchMemoryManager
 
@@ -60,7 +59,7 @@ def train(net, loader, criterion, optim, device=None, log_dir=None, epoch=None,
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          dataset=None, train_subset=1, indices_path=None, label_noise=0, num_workers=2,
-         cfg_path=None, transfer=False, model_name='resnet18k', base_width=None,
+         cfg_path=None, ckpt_name=None, transfer=False, model_name='resnet18k', base_width=None,
          batch_size=128, optimizer='adam', lr=1e-3, momentum=.9, weight_decay=5e-4, epochs=0,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
@@ -87,15 +86,11 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
                        base_width=base_width,
                        seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
-                       cfg_path=cfg_path, transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name)
+                       cfg_path=cfg_path, ckpt_name=ckpt_name,
+                       transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name)
     if distributed:
         # net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device_id], broadcast_buffers=True)
-
-    # removed if not non_private condition, use same model for priv and non-priv training
-    errors = ModuleValidator.validate(net, strict=False)
-    print(errors)
-    net = ModuleValidator.fix(net)
 
     criterion = nn.CrossEntropyLoss()
     if optimizer == 'sgd':
