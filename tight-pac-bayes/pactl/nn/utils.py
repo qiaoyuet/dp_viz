@@ -4,6 +4,7 @@ from pathlib import Path
 import timm
 import torch
 from opacus.validators import ModuleValidator
+import os
 
 from ..logging import wandb
 from .projectors import create_intrinsic_model
@@ -20,6 +21,11 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
     net_cfg, intrinsic_cfg = None, None
     base_ckpt_path, id_ckpt_path = None, None
 
+    if log_dir is not None:
+        ckpt_path = os.path.join(log_dir, exp_name)
+        if not os.path.exists(ckpt_path):
+            os.mkdir(ckpt_path)
+
     if cfg_path is not None:
         with open(cfg_path, 'r') as f:
             net_cfg = yaml.safe_load(f)
@@ -31,7 +37,7 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
         if intrinsic_cfg is not None:
             net_ckpt_file = 'init_model.pt'
         elif ckpt_name is not None:
-            net_ckpt_file = net_cfg.get('ckpt_file', 'best_sgd_model.pt')
+            net_ckpt_file = net_cfg.get('ckpt_file', '{}.pt'.format(ckpt_name))
         elif intrinsic_cfg is None and ckpt_name is None:
             net_ckpt_file = net_cfg.get('ckpt_file', 'best_sgd_model.pt')
         else:
@@ -55,17 +61,14 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
         intrinsic_cfg = dict(intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode, seed=seed)
 
     ## Load base model.
-    if compute_bound:
-        base_net = timm.create_model(**net_cfg, checkpoint_path=base_ckpt_path)
+    # load model with corrected modules from opacus
+    if base_ckpt_path is not None:
+        base_net = timm.create_model(**net_cfg, checkpoint_path=None)
+        base_net = ModuleValidator.fix(base_net)
+        base_net.load_state_dict(torch.load(base_ckpt_path))
+        logging.info(f'Loaded base model from "{base_ckpt_path}".')
     else:
-        # load model with corrected modules from opacus
-        if base_ckpt_path is not None:
-            base_net = timm.create_model(**net_cfg, checkpoint_path=None)
-            base_net = ModuleValidator.fix(base_net)
-            base_net.load_state_dict(torch.load(base_ckpt_path))
-            logging.info(f'Loaded base model from "{base_ckpt_path}".')
-        else:
-            base_net = timm.create_model(**net_cfg, checkpoint_path=None)
+        base_net = timm.create_model(**net_cfg, checkpoint_path=None)
 
     ## removed if not non_private condition, use same model for priv and non-priv training
     if not transfer and not compute_bound:

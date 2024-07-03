@@ -80,6 +80,7 @@ def set_logging(metrics_extra_key='wandb', log_dir=None, exp_group='tmp', exp_na
     # wandb.init(mode=os.environ.get('WANDB_MODE', default='offline'))
     wandb.init(mode=os.environ.get('WANDB_MODE', default='online'),
                project='pac_bayes_bound', group=exp_group, name=exp_name)
+    # wandb.init(project='pac_bayes_bound', group=exp_group, name=exp_name)
 
     log_dir = get_log_dir(log_dir=log_dir)
 

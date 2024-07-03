@@ -78,11 +78,6 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers,
                              sampler=DistributedSampler(test_data) if distributed else None)
 
-    if log_dir is not None:
-        ckpt_path = os.path.join(log_dir, exp_name)
-        if not os.path.exists(ckpt_path):
-            os.mkdir(ckpt_path)
-
     net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
                        base_width=base_width,
                        seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
@@ -185,10 +180,6 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
             if not non_private:
                 logging.info({'dp_epsilon': privacy_engine.get_epsilon(delta=1e-5)},
                              extra=dict(wandb=True, prefix='sgd/train'))
-
-            # ckpt_path = os.path.join(log_dir, exp_name)
-            # if not os.path.exists(ckpt_path):
-            #     os.mkdir(ckpt_path)
 
             # save intermediate ckpts
             if len(ckpt_every) > 0 and e in ckpt_every:

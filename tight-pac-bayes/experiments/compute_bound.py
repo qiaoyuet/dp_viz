@@ -30,6 +30,7 @@ def main(
     indices_path=None,
     num_workers=4,
     distributed=False,
+    exp_name='tmp',
 ):
 
     random_seed_all(seed)
@@ -78,7 +79,7 @@ def main(
         logging.info(bound_metrics, extra=dict(wandb=True))
 
 
-def entrypoint(log_dir=None, **kwargs):
+def entrypoint(log_dir=None, exp_group='tmp', exp_name='tmp', **kwargs):
     world_size, rank, device_id = maybe_launch_distributed()
 
     if 'device_id' in list(kwargs.keys()):
@@ -88,14 +89,16 @@ def entrypoint(log_dir=None, **kwargs):
     torch.cuda.set_device(device_id)
 
     ## Only setup logging from one process (rank = 0).
-    log_dir = set_logging(log_dir=log_dir) if rank == 0 else None
+    log_dir = set_logging(log_dir=log_dir, exp_group=exp_group, exp_name=exp_name) if rank == 0 else None
     if rank == 0:
         logging.info(f'Working with {world_size} process(es).')
 
     main(**kwargs,
          log_dir=log_dir,
          distributed=(world_size > 1),
-         device_id=device_id)
+         device_id=device_id,
+         exp_name=exp_name
+         )
 
     if rank == 0:
         finish_logging()
