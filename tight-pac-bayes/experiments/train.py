@@ -141,9 +141,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 optimizer.step()
                 step_counter += 1
 
-                if log_dir is not None and i % 100 == 0:
-                    metrics = {'epoch': e, 'step': step_counter, 'mini_loss': loss.detach().item()}
-                    logging.info(metrics, extra=dict(wandb=True, prefix='train'))
+                # if log_dir is not None and i % 100 == 0:
+                #     metrics = {'mini_loss': loss.detach().item()}
+                #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
 
                 if log_dir is not None and step_counter % eval_every == 0:
                     train_metrics = eval_model(net, train_loader, criterion, device_id=device_id,
@@ -168,9 +168,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                     optimizer.step()
                     step_counter += 1
 
-                    if log_dir is not None and i % 100 == 0:
-                        metrics = {'epoch': e, 'step': step_counter, 'mini_loss': loss.detach().item()}
-                        logging.info(metrics, extra=dict(wandb=True, prefix='train'))
+                    # if log_dir is not None and i % 100 == 0:
+                    #     metrics = {'mini_loss': loss.detach().item()}
+                    #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
 
                     if log_dir is not None and step_counter % eval_every == 0:
                         train_metrics = eval_model(net, train_loader, criterion, device_id=device_id,
