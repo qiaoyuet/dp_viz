@@ -64,14 +64,14 @@ def get_log_dir(log_dir=None):
     if log_dir is not None:
         return Path(log_dir)
 
-    root_dir = None
-    if not isinstance(wandb, WandBNop):
-        root_dir = Path(wandb.run.dir) / '..'
-    else:
-        root_dir = Path(os.environ.get('LOGDIR', Path.cwd() / '.log')) / f'run-{str(uuid4())[:8]}'
-
-    log_dir = Path(str((root_dir / 'files').resolve()))
-    log_dir.mkdir(parents=True, exist_ok=True)
+    # root_dir = None
+    # if not isinstance(wandb, WandBNop):
+    #     root_dir = Path(wandb.run.dir) / '..'
+    # else:
+    #     root_dir = Path(os.environ.get('LOGDIR', Path.cwd() / '.log')) / f'run-{str(uuid4())[:8]}'
+    #
+    # log_dir = Path(str((root_dir / 'files').resolve()))
+    # log_dir.mkdir(parents=True, exist_ok=True)
 
     return log_dir
 
