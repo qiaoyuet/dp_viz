@@ -5,9 +5,10 @@ from .distributed import DistributedValue
 
 
 @torch.no_grad()
-def eval_model(model, data_loader, criterion=None, device_id=None, distributed=False):
+def eval_model(model, data_loader, criterion=None, device_id=None, distributed=False, audit=False):
     model.eval()
 
+    losses = []
     N = len(data_loader.dataset)
 
     nll = torch.tensor(0.).to(device_id)
@@ -22,7 +23,10 @@ def eval_model(model, data_loader, criterion=None, device_id=None, distributed=F
         logits = model(X)
 
         if criterion is not None:
-            nll += criterion(logits, Y) * Y.size(0)
+            loss = criterion(logits, Y) * Y.size(0)
+            nll += loss
+            if audit:
+                losses.append(loss)  # fixme: does O(1) need per-sample loss?
         N_acc += (logits.argmax(dim=-1) == Y).sum()
 
     if distributed:
@@ -31,4 +35,4 @@ def eval_model(model, data_loader, criterion=None, device_id=None, distributed=F
 
     metrics = {'nll': nll.item(), 'acc': N_acc.item() / N, 'avg_nll': nll.item() / N}
 
-    return metrics
+    return metrics, losses

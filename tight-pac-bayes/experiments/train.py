@@ -21,6 +21,8 @@ from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
 from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
 
+from experiments.auditing_utils import find_O1_pred
+
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          dataset=None, train_subset=1, indices_path=None, label_noise=0, num_workers=2,
@@ -28,7 +30,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          batch_size=128, optimizer='adam', lr=1e-3, momentum=.9, weight_decay=5e-4, epochs=0,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
-         dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000):
+         dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000,
+         audit=False, non_mem_prop=0.2):
     random_seed_all(seed)
 
     train_data, test_data = get_dataset(
@@ -37,11 +40,19 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         label_noise=label_noise,
         indices_path=indices_path)
 
+    if audit:
+        train_data, non_mem_data = torch.utils.data.random_split(train_data, [1 - non_mem_prop, non_mem_prop])
+
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=not distributed,
                               sampler=DistributedSampler(train_data) if distributed else None)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers,
                              sampler=DistributedSampler(test_data) if distributed else None)
+
+    if audit:
+        non_member_loader = DataLoader(non_mem_data, batch_size=batch_size, num_workers=num_workers,
+                                       shuffle=not distributed,
+                                       sampler=DistributedSampler(non_mem_data) if distributed else None)
 
     net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
                        base_width=base_width,
@@ -97,7 +108,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                                                 scheduler_after=[optim_scheduler])
     if not non_private:
         # Privacy engine
-        privacy_engine = PrivacyEngine()
+        privacy_engine = PrivacyEngine(accountant='prv')
         if target_epsilon > 0 and dp_noise < 0:
             model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
                 module=net,
@@ -146,12 +157,20 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
 
                 if log_dir is not None and step_counter % eval_every == 0:
-                    train_metrics = eval_model(net, train_loader, criterion, device_id=device_id,
-                                               distributed=distributed)
-                    test_metrics = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
+                    train_metrics, mem_losses = eval_model(net, train_loader, criterion, device_id=device_id,
+                                                           distributed=distributed, audit=audit)
+                    test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id,
+                                                 distributed=distributed, audit=False)
                     train_metrics.update({'epoch': e, 'step': step_counter})
                     logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
                     logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
+
+                    if audit:
+                        _, non_mem_losses = eval_model(net, non_member_loader, criterion, device_id=device_id,
+                                                       distributed=distributed, audit=audit)
+                        total_predictions, correct_predictions, num_samples, audit_metrics = \
+                            find_O1_pred(mem_losses.cpu().detach().numpy(), non_mem_losses.cpu().detach().numpy())
+                        logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
 
         else:
             with BatchMemoryManager(
@@ -173,14 +192,21 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                     #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
 
                     if log_dir is not None and step_counter % eval_every == 0:
-                        train_metrics = eval_model(net, train_loader, criterion, device_id=device_id,
-                                                   distributed=distributed)
-                        test_metrics = eval_model(net, test_loader, criterion, device_id=device_id,
-                                                  distributed=distributed)
+                        train_metrics, mem_losses = eval_model(net, train_loader, criterion, device_id=device_id,
+                                                               distributed=distributed)
+                        test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id,
+                                                     distributed=distributed)
                         dp_epsilon = privacy_engine.get_epsilon(delta=1e-5)
-                        train_metrics.update({'epoch': e, 'step': step_counter, 'dp_epsilon':dp_epsilon})
+                        train_metrics.update({'epoch': e, 'step': step_counter, 'dp_epsilon': dp_epsilon})
                         logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
                         logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
+
+                        if audit:
+                            _, non_mem_losses = eval_model(net, non_member_loader, criterion, device_id=device_id,
+                                                           distributed=distributed, audit=audit)
+                            total_predictions, correct_predictions, num_samples, audit_metrics = \
+                                find_O1_pred(mem_losses.cpu().detach().numpy(), non_mem_losses.cpu().detach().numpy())
+                            logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
 
         if optim_scheduler is not None:
             optim_scheduler.step()
@@ -191,8 +217,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 torch.save(net.state_dict(), Path(log_dir) / exp_name / 'interm_model_e{}.pt'.format(e))
 
             # save best model
-            train_metrics = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
-            test_metrics = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
+            train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
+            test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
             if test_metrics['acc'] > best_test_acc_so_far:
                 best_acc_so_far = test_metrics['acc']
                 logging.info({'best_test_epoch': e, 'best_test_acc': best_acc_so_far},
@@ -225,4 +251,5 @@ def entrypoint(log_dir=None, exp_group='tmp', exp_name='tmp', **kwargs):
 
 if __name__ == '__main__':
     import fire
+
     fire.Fire(entrypoint)
