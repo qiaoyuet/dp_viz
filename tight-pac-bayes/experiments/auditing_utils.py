@@ -123,19 +123,20 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
                 if accuracy > best_accuracy:
                     best_accuracy = accuracy
 
-            results.append({
-                't_pos': t_pos,
-                't_neg': best_t_neg,
-                'best_precision': precision,
-                'best_accuracy': best_accuracy,
-                'recall': recall,
-                'total_predictions': r,
-                'correct_predictions': v
-            })
+            # results.append({
+            #     't_pos': t_pos,
+            #     't_neg': best_t_neg,
+            #     'best_precision': precision,
+            #     'best_accuracy': best_accuracy,
+            #     'recall': recall,
+            #     'total_predictions': r,
+            #     'correct_predictions': v
+            # })  # suppress logging
 
     metric = {
         'best_eps': best_eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
-        'best_precision': best_precision, 'best_accuracy': best_accuracy
+        'best_precision': best_precision, 'best_accuracy': best_accuracy,
+        'total_predictions': total_predictions, 'correct_predictions': correct_predictions
     }
     print(f"Best eps: {best_eps} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
     print(f"Best precision for t_pos: {best_precision} with t_pos: {best_t_pos}")
@@ -152,4 +153,5 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     #     for result in results:
     #         writer.writerow(result)
 
-    return total_predictions, correct_predictions, len(all_losses), metric
+    # return total_predictions, correct_predictions, len(all_losses), metric
+    return metric

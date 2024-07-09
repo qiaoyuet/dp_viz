@@ -1,5 +1,6 @@
 from tqdm.auto import tqdm
 import torch
+import torch.nn as nn
 
 from .distributed import DistributedValue
 
@@ -7,6 +8,11 @@ from .distributed import DistributedValue
 @torch.no_grad()
 def eval_model(model, data_loader, criterion=None, device_id=None, distributed=False, audit=False):
     model.eval()
+
+    if criterion is not None:
+        criterion = nn.CrossEntropyLoss(reduction='none')  # get per-sample loss for audit
+    else:
+        raise NotImplementedError
 
     losses = []
     N = len(data_loader.dataset)
@@ -23,10 +29,12 @@ def eval_model(model, data_loader, criterion=None, device_id=None, distributed=F
         logits = model(X)
 
         if criterion is not None:
-            loss = criterion(logits, Y) * Y.size(0)
-            nll += loss
+            # loss = criterion(logits, Y) * Y.size(0)
+            loss_each = criterion(logits, Y)
+            loss_sum = torch.sum(loss_each)
+            nll += loss_sum
             if audit:
-                losses.append(loss)  # fixme: does O(1) need per-sample loss?
+                losses.extend(loss_each.cpu().detach().numpy())
         N_acc += (logits.argmax(dim=-1) == Y).sum()
 
     if distributed:
