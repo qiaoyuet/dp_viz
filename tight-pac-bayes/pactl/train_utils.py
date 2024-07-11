@@ -21,19 +21,20 @@ def eval_model(model, data_loader, criterion=None, device_id=None, distributed=F
         nll = DistributedValue(nll)
         N_acc = DistributedValue(N_acc)
 
-    for X, Y in tqdm(data_loader, leave=False):
-        X, Y = X.to(device_id), Y.to(device_id)
+    with torch.no_grad():
+        for X, Y in tqdm(data_loader, leave=False):
+            X, Y = X.to(device_id), Y.to(device_id)
 
-        logits = model(X)
+            logits = model(X)
 
-        if audit:
-            loss_each = criterion(logits, Y)
-            loss_sum = torch.sum(loss_each)
-            nll += loss_sum
-            losses.extend(loss_each.cpu().detach().numpy())
-        else:
-            nll += criterion(logits, Y) * Y.size(0)
-        N_acc += (logits.argmax(dim=-1) == Y).sum()
+            if audit:
+                loss_each = criterion(logits, Y)
+                loss_sum = torch.sum(loss_each)
+                nll += loss_sum
+                losses.extend(loss_each.cpu().detach().numpy())
+            else:
+                nll += criterion(logits, Y) * Y.size(0)
+            N_acc += (logits.argmax(dim=-1) == Y).sum()
 
     if distributed:
         nll = nll.resolve()
