@@ -173,8 +173,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                                                    distributed=distributed, audit=True)
                         _, non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
                                                        distributed=distributed, audit=True)
-                        total_predictions, correct_predictions, num_samples, audit_metrics = \
-                            find_O1_pred(mem_losses, non_mem_losses)
+                        audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
                         t1 = time.time()
                         print("+++++++++++++++++: {}".format(t1 - t0))
@@ -213,8 +212,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                                                        distributed=distributed, audit=True)
                             _, non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
                                                            distributed=distributed, audit=True)
-                            total_predictions, correct_predictions, num_samples, audit_metrics = \
-                                find_O1_pred(mem_losses, non_mem_losses)
+                            audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                             logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
                             t1 = time.time()
                             print("+++++++++++++++++: {}".format(t1 - t0))
