@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import scipy
+from tqdm import tqdm
 
 
 def p_value_DP_audit(m, r, v, eps, delta=0):
@@ -75,7 +76,8 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     # Step 1: Find t_pos that maximizes precision for positive predictions
     best_precision = 0
     best_t_pos = 0
-    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
+    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
+    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.1)
     results, recall = [], []
     best_accuracy = 0
     best_t_neg = 0
@@ -83,7 +85,7 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     correct_predictions = 0
     best_eps = 0
     p = 0.05
-    for t_pos in threshold_range:
+    for t_pos in tqdm(threshold_range):
         positive_predictions = all_losses[all_losses <= t_pos]
         if len(positive_predictions) == 0:
             continue
@@ -91,17 +93,17 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
         true_positives = np.sum(all_labels[all_losses <= t_pos] == 1)
 
         eps = get_eps_audit(len(all_labels), len(positive_predictions), true_positives, p, delta)
-        precision = true_positives / len(positive_predictions)
+        # precision = true_positives / len(positive_predictions)
         if eps > best_eps:
             print("EPSILON UPDATE:", eps)
             best_eps = eps
             best_t_pos = t_pos
-        recalls = true_positives / np.sum(all_labels == 1)
-        recall.append(recalls)
+        # recalls = true_positives / np.sum(all_labels == 1)
+        # recall.append(recalls)
 
     # unnest inside loop for faster computation
     # Step 2: With t_pos fixed, find t_neg that maximizes overall accuracy
-    for t_neg in reversed(threshold_range):
+    for t_neg in tqdm(reversed(threshold_range)):
         if t_neg <= best_t_pos:
             break
         confident_predictions = all_losses[(all_losses <= best_t_pos) | (all_losses >= t_neg)]

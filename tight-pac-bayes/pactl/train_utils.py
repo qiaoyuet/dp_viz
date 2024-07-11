@@ -9,10 +9,8 @@ from .distributed import DistributedValue
 def eval_model(model, data_loader, criterion=None, device_id=None, distributed=False, audit=False):
     model.eval()
 
-    if criterion is not None:
+    if audit:
         criterion = nn.CrossEntropyLoss(reduction='none')  # get per-sample loss for audit
-    else:
-        raise NotImplementedError
 
     losses = []
     N = len(data_loader.dataset)
@@ -28,13 +26,13 @@ def eval_model(model, data_loader, criterion=None, device_id=None, distributed=F
 
         logits = model(X)
 
-        if criterion is not None:
-            # loss = criterion(logits, Y) * Y.size(0)
+        if audit:
             loss_each = criterion(logits, Y)
             loss_sum = torch.sum(loss_each)
             nll += loss_sum
-            if audit:
-                losses.extend(loss_each.cpu().detach().numpy())
+            losses.extend(loss_each.cpu().detach().numpy())
+        else:
+            nll += criterion(logits, Y) * Y.size(0)
         N_acc += (logits.argmax(dim=-1) == Y).sum()
 
     if distributed:
