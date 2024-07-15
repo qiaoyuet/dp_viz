@@ -258,12 +258,12 @@ def eval_acc_and_bound(
 
     if posterior_scale is None:
         quant_train_acc = eval_model(model, trainloader, device_id=device,
-                                     distributed=distributed)['acc']
+                                     distributed=distributed)[0]['acc']
         if log_dir is not None:
             logging.info(f'Quantized train accuracy: {quant_train_acc:.4f}')
 
         quant_test_acc = eval_model(model, testloader, device_id=device,
-                                    distributed=distributed)['acc']
+                                    distributed=distributed)[0]['acc']
         if log_dir is not None:
             logging.info(f'Quantized test accuracy: {quant_test_acc:.4f}')
     else:
