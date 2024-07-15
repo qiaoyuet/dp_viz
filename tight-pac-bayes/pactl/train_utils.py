@@ -26,13 +26,14 @@ def eval_model(model, data_loader, criterion=None, device_id=None, distributed=F
 
         logits = model(X)
 
-        if audit:
-            loss_each = criterion(logits, Y)
-            loss_sum = torch.sum(loss_each)
-            nll += loss_sum
-            losses.extend(loss_each.cpu().detach().numpy())
-        else:
-            nll += criterion(logits, Y) * Y.size(0)
+        if criterion is not None:
+            if audit:
+                loss_each = criterion(logits, Y)
+                loss_sum = torch.sum(loss_each)
+                nll += loss_sum
+                losses.extend(loss_each.cpu().detach().numpy())
+            else:
+                nll += criterion(logits, Y) * Y.size(0)
         N_acc += (logits.argmax(dim=-1) == Y).sum()
 
     if distributed:

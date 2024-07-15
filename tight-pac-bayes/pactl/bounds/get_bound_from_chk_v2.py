@@ -158,10 +158,10 @@ def evaluate_idmodel(
     log_dir=None,
 ):
 
-    train_acc = eval_model(model, trainloader, device_id=device, distributed=distributed)['acc']
+    train_acc = eval_model(model, trainloader, device_id=device, distributed=distributed)[0]['acc']
     if log_dir is not None:
         logging.info(f'Train accuracy: {train_acc:.4f}')
-    test_acc = eval_model(model, testloader, device_id=device, distributed=distributed)['acc']
+    test_acc = eval_model(model, testloader, device_id=device, distributed=distributed)[0]['acc']
     if log_dir is not None:
         logging.info(f'Test accuracy: {test_acc:.4f}')
 
