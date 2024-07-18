@@ -33,7 +33,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
          dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000,
-         audit=False, audit_size=2000):
+         audit=False, audit_size=5000):
     random_seed_all(seed)
 
     train_data, test_data = get_dataset(
@@ -168,6 +168,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                     logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
                     logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
 
+                    # save interm ckpts
+                    torch.save(net.state_dict(), Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+
                     if audit:
                         # t0 = time.time()
                         _, mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
@@ -221,11 +224,6 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         if optim_scheduler is not None:
             optim_scheduler.step()
 
-        # if log_dir is not None:
-        #     # save intermediate ckpts
-        #     if len(ckpt_every) > 0 and e in ckpt_every:
-        #         torch.save(net.state_dict(), Path(log_dir) / exp_name / 'interm_model_e{}.pt'.format(e))
-        #
         #     # save best model
         #     train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
         #     test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
