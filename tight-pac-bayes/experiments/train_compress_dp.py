@@ -12,6 +12,11 @@ from opacus import PrivacyEngine
 from opacus.utils.batch_memory_manager import BatchMemoryManager
 import time
 import numpy as np
+import yaml
+import timm
+from opacus.validators import ModuleValidator
+import os
+from opacus.utils.per_sample_gradients_utils import check_per_sample_gradients_are_correct
 
 from pactl.distributed import maybe_launch_distributed
 from pactl.logging import set_logging, wandb, finish_logging
@@ -24,6 +29,7 @@ from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
 
 from experiments.auditing_utils import find_O1_pred
+from experiments.my_privacy_engine import MyPrivacyEngine
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
@@ -33,7 +39,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
          dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000,
-         audit=False, audit_size=2000):
+         audit=False, audit_size=2000, non_private_intrinsic=True):
     random_seed_all(seed)
 
     train_data, test_data = get_dataset(
@@ -60,8 +66,10 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                        base_width=base_width,
                        seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
                        cfg_path=cfg_path, ckpt_name=ckpt_name,
-                       transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name
+                       transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name,
+                       non_private_intrinsic=non_private_intrinsic
                        )
+
     if distributed:
         # net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device_id], broadcast_buffers=True)
@@ -109,8 +117,10 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         optim_scheduler = LinearWarmupScheduler(optimizer,
                                                 warm_epochs=[warmup_epochs], lr_goal=[warmup_lr],
                                                 scheduler_after=[optim_scheduler])
-    if not non_private:
+
+    if not non_private_intrinsic:
         # Privacy engine
+        # privacy_engine = MyPrivacyEngine(accountant='prv')
         privacy_engine = PrivacyEngine(accountant='prv')
         if target_epsilon > 0 and dp_noise < 0:
             model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
@@ -121,6 +131,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 target_epsilon=target_epsilon,
                 target_delta=1e-5,
                 max_grad_norm=dp_C,
+                poisson_sampling=False,  # turned off temporarily: need to fix module
+                grad_sample_mode="functorch"
             )
             logging.info({'dp_noise': optimizer.noise_multiplier, 'dp_C': dp_C},
                          extra=dict(wandb=True, prefix='train'))
@@ -131,6 +143,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 data_loader=train_loader,
                 noise_multiplier=dp_noise,
                 max_grad_norm=dp_C,
+                poisson_sampling=False,  # turned off temporarily: need to fix module
+                grad_sample_mode="functorch"
             )
             logging.info({'dp_noise': dp_noise, 'dp_C': dp_C},
                          extra=dict(wandb=True, prefix='train'))
@@ -145,78 +159,51 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         if distributed:
             train_loader.sampler.set_epoch(e)
 
-        if non_private:
-            for i, (X, Y) in tqdm(enumerate(train_loader), leave=False):
-                X, Y = X.to(device_id), Y.to(device_id)
-                optimizer.zero_grad()
-                f_hat = net(X)
-                loss = criterion(f_hat, Y)
-                loss.backward()
-                optimizer.step()
-                step_counter += 1
+        for i, (X, Y) in tqdm(enumerate(train_loader), leave=False):
+            # # Run samples one-by-one to get per-sample gradients
+            # for X_i, Y_i in zip(X, Y):
+            #     X_i, Y_i = X_i.to(device_id), Y_i.to(device_id)
+            #     X_i.unsqueeze_(0), Y_i.unsqueeze_(0)
+            #     f_hat_i = net(X_i)
+            #     loss = criterion(f_hat_i, Y_i)
+            #     loss.backward()
+            #
+            #     # Clip each parameter's per-sample gradient
+            #     for p in net.parameters():
+            #         per_sample_grad = p.grad.detach().clone()
+            #         torch.nn.utils.clip_grad_norm(per_sample_grad, max_norm=dp_C)
+            #         p.grad_sample.append(per_sample_grad)
+            X, Y = X.to(device_id), Y.to(device_id)
+            optimizer.zero_grad()
+            f_hat = net(X)
+            loss = criterion(f_hat, Y)
+            loss.backward()
+            optimizer.step()
+            step_counter += 1
 
-                # if log_dir is not None and i % 100 == 0:
-                #     metrics = {'mini_loss': loss.detach().item()}
-                #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
+            # if log_dir is not None and i % 100 == 0:
+            #     metrics = {'mini_loss': loss.detach().item()}
+            #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
 
-                if log_dir is not None and step_counter % eval_every == 0:
-                    train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id,
-                                                  distributed=distributed, audit=False)
-                    test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id,
-                                                 distributed=distributed, audit=False)
-                    train_metrics.update({'epoch': e, 'step': step_counter})
-                    logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
-                    logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
+            if log_dir is not None and step_counter % eval_every == 0:
+                train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id,
+                                              distributed=distributed, audit=False)
+                test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id,
+                                             distributed=distributed, audit=False)
+                train_metrics.update({'epoch': e, 'step': step_counter})
+                logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
+                logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
 
-                    if audit:
-                        # t0 = time.time()
-                        _, mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
+                if audit:
+                    # t0 = time.time()
+                    _, mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
+                                               distributed=distributed, audit=True)
+                    _, non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
                                                    distributed=distributed, audit=True)
-                        _, non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
-                                                       distributed=distributed, audit=True)
-                        audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
-                        logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
-                        # t1 = time.time()
-                        # print("+++++++++++++++++: {}".format(t1 - t0))
-        else:
-            with BatchMemoryManager(
-                    data_loader=train_loader,
-                    max_physical_batch_size=dp_virtual_batch_size,
-                    optimizer=optimizer
-            ) as memory_safe_data_loader:
-                for i, (X, Y) in tqdm(enumerate(memory_safe_data_loader), leave=False):
-                    X, Y = X.to(device_id), Y.to(device_id)
-                    optimizer.zero_grad()
-                    f_hat = net(X)
-                    loss = criterion(f_hat, Y)
-                    loss.backward()
-                    optimizer.step()
-                    step_counter += 1
-
-                    # if log_dir is not None and i % 100 == 0:
-                    #     metrics = {'mini_loss': loss.detach().item()}
-                    #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
-
-                    if log_dir is not None and step_counter % eval_every == 0:
-                        train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id,
-                                                      distributed=distributed, audit=False)
-                        test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id,
-                                                     distributed=distributed, audit=False)
-                        dp_epsilon = privacy_engine.get_epsilon(delta=1e-5)
-                        train_metrics.update({'epoch': e, 'step': step_counter, 'dp_epsilon': dp_epsilon})
-                        logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
-                        logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
-
-                        if audit:
-                            # t0 = time.time()
-                            _, mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
-                                                       distributed=distributed, audit=True)
-                            _, non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
-                                                           distributed=distributed, audit=True)
-                            audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
-                            logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
-                            # t1 = time.time()
-                            # print("+++++++++++++++++: {}".format(t1 - t0))
+                    audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                    logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
+                    # t1 = time.time()
+                    # print("+++++++++++++++++: {}".format(t1 - t0))
 
         if optim_scheduler is not None:
             optim_scheduler.step()

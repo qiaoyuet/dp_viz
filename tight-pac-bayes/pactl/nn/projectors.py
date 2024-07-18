@@ -12,6 +12,8 @@ from .linear_operator_base import (
     LinearOperator,
     LazyDirectSum,
 )
+from opacus import GradSampleModule
+from opacus.grad_sample import register_grad_sampler
 
 
 _DEFAULT_SEED = 137
@@ -520,6 +522,7 @@ def create_intrinsic_model(
     intrinsic_dim=1000,
     seed=None,
     device=None,
+    non_private_intrinsic=True,
 ):
     if seed is None:
         raise ValueError(

@@ -843,9 +843,9 @@ class LazyKron(LinearOperator):
         return ev.reshape(self.shape[0],ev.shape[-1])
     def _adjoint(self):
         return LazyKron([Mi.T for Mi in self.Ms])
-    def __new__(cls,Ms):
-        if len(Ms)==1: return Ms[0]
-        return super().__new__(cls)
+    # def __new__(cls,Ms):
+    #     if len(Ms)==1: return Ms[0]
+    #     return super().__new__(cls)
 
 
 class ConcatLazy(LinearOperator):
@@ -861,6 +861,7 @@ class ConcatLazy(LinearOperator):
         return self._matmat(v)
     def _matmat(self,V):
         return torch.cat([M@V for M in self.Ms],dim=0)
+    ## removed below because deepcopy doesn't work (needed in privacy engine)
     # def _rmatmat(self,V):
     #     Vs = torch.split(V,len(self.Ms),dim=0)
     #     return sum([self.Ms[i].T@Vs[i] for i in range(len(self.Ms))])

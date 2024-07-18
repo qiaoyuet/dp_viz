@@ -13,7 +13,7 @@ from .projectors import create_intrinsic_model
 def create_model(model_name=None, num_classes=None, base_width=None, in_chans=None,
                  seed=None, intrinsic_dim=0, intrinsic_mode='sparse',
                  cfg_path=None, ckpt_name=None, transfer=False, device_id=None, log_dir=None, exp_name='tmp',
-                 compute_bound=False
+                 compute_bound=False, non_private_intrinsic=True
                  ):
     device = torch.device(f'cuda:{device_id}') if isinstance(device_id, int) else None
 
@@ -90,7 +90,8 @@ def create_model(model_name=None, num_classes=None, base_width=None, in_chans=No
 
     ## Create intrinsic dimensionality model.
     final_net = base_net if intrinsic_cfg is None else \
-        create_intrinsic_model(base_net, **intrinsic_cfg, ckpt_path=id_ckpt_path, device=device)
+        create_intrinsic_model(base_net, **intrinsic_cfg, ckpt_path=id_ckpt_path, device=device,
+                               non_private_intrinsic=non_private_intrinsic)
     final_net = final_net.to(device)
     if id_ckpt_path is not None:
         logging.info(f'Loaded ID model from "{id_ckpt_path}".')
