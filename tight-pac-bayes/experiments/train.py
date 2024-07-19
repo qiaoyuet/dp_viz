@@ -168,10 +168,11 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                     logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
                     logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
 
-                    # save interm ckpts
-                    torch.save(net.state_dict(), Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
-
                     if audit:
+                        # save interm ckpts
+                        torch.save(net.state_dict(),
+                                   Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+
                         # t0 = time.time()
                         _, mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
                                                    distributed=distributed, audit=True)
