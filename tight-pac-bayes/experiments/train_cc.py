@@ -227,20 +227,20 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         if optim_scheduler is not None:
             optim_scheduler.step()
 
-        #     # save best model
-        #     train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
-        #     test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
-        #     if test_metrics['acc'] > best_test_acc_so_far:
-        #         best_acc_so_far = test_metrics['acc']
-        #         logging.info({'best_test_epoch': e, 'best_test_acc': best_acc_so_far},
-        #                      extra=dict(wandb=True, prefix='test'))
-        #         torch.save(net.state_dict(), Path(log_dir) / exp_name / 'best_sgd_model.pt')
-        #     if train_metrics['acc'] > best_train_acc_so_far:
-        #         best_acc_so_far = train_metrics['acc']
-        #         logging.info({'best_train_epoch': e, 'best_train_acc': best_acc_so_far},
-        #                      extra=dict(wandb=True, prefix='train'))
-        #     # torch.save(net.state_dict(), Path(log_dir) / exp_name / 'sgd_model.pt')
-        #     # wandb.save('*.pt')  ## NOTE: to upload immediately.
+        # epoch wise logging
+        train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
+        test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
+        if test_metrics['acc'] > best_test_acc_so_far:
+            best_acc_so_far = test_metrics['acc']
+            logging.info({'best_test_epoch': e, 'best_test_acc': best_acc_so_far},
+                         extra=dict(wandb=True, prefix='test'))
+            # torch.save(net.state_dict(), Path(log_dir) / exp_name / 'best_sgd_model.pt')
+        if train_metrics['acc'] > best_train_acc_so_far:
+            best_acc_so_far = train_metrics['acc']
+            logging.info({'best_train_epoch': e, 'best_train_acc': best_acc_so_far},
+                         extra=dict(wandb=True, prefix='train'))
+            # torch.save(net.state_dict(), Path(log_dir) / exp_name / 'sgd_model.pt')
+        # wandb.save('*.pt')  ## NOTE: to upload immediately.
 
 
 def entrypoint(log_dir=None, exp_group='tmp', exp_name='tmp', **kwargs):
