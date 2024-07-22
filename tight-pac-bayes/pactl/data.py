@@ -95,6 +95,30 @@ class LabelNoiseDataset(WrapperDataset):
         return X, y
 
 
+class CanariesDataset(WrapperDataset):
+    def __init__(self, dataset, n_labels=10, num_canaries=0):
+        super().__init__(dataset)
+
+        self.C = n_labels
+
+        if num_canaries > 0:
+            labels = np.array(self.targets)
+            mask = np.arange(0, len(labels)) < num_canaries
+            np.random.seed(12345)
+            np.random.shuffle(mask)
+            rnd_labels = np.random.choice(self.C, mask.sum())
+            labels[mask] = rnd_labels
+            # we need to explicitly cast the labels from npy.int64 to
+            # builtin int type, otherwise pytorch will fail...
+            labels = [int(x) for x in labels]
+            self.noisy_targets = labels
+
+    def __getitem__(self, i):
+        X, y = super().__getitem__(i)
+        y = self.noisy_targets[i]
+        return X, y
+
+
 def get_data_dir(data_dir=None):
     if data_dir is None:
         if os.environ.get('DATADIR') is not None:
@@ -181,9 +205,9 @@ def get_dataset_with_canaries(dataset, root=None, train_subset=1, label_noise=0,
 
     if label_noise > 0:
         num_canaries_train = math.floor(len(train_data) * label_noise)
-        train_data = LabelNoiseDataset(train_data, n_labels=num_classes, label_noise=num_canaries_train)
+        train_data = CanariesDataset(train_data, n_labels=num_classes, num_canaries=num_canaries_train)
         num_canaries_test = math.floor(len(test_data) * label_noise)
-        test_data = LabelNoiseDataset(test_data, n_labels=num_classes, label_noise=num_canaries_test)
+        test_data = CanariesDataset(test_data, n_labels=num_classes, num_canaries=num_canaries_test)
 
     if np.abs(train_subset) < 1:
         n = len(train_data)
