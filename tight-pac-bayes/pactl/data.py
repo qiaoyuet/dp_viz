@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, Subset
 from torch.distributions import Categorical
 import torchvision.transforms as transforms
 from timm.data import create_dataset, ImageDataset
+import math
 
 
 __all__ = [
@@ -152,6 +153,54 @@ def get_dataset(dataset, root=None, train_subset=1, label_noise=0,
 
     setattr(train_data, 'num_classes', num_classes)
     return train_data, test_data
+
+
+def get_dataset_with_canaries(dataset, root=None, train_subset=1, label_noise=0, indices_path=None, **kwargs):
+    root = get_data_dir(data_dir=root)
+
+    if dataset == 'mnist':
+        train_data, test_data = get_mnist(root=root,**kwargs)
+    elif dataset == 'fmnist':
+        train_data, test_data = get_fmnist(root=root,**kwargs)
+    elif dataset == 'svhn':
+        train_data, test_data = get_svhn(root=root,**kwargs)
+    elif dataset == 'svhn28':
+        train_data, test_data = get_svhn28(root=root,**kwargs)
+    elif dataset == 'cifar10':
+        train_data, test_data = get_cifar10(root=root,**kwargs)
+    elif dataset == 'cifar100':
+        train_data, test_data = get_cifar100(root=root,**kwargs)
+    elif dataset == 'tiny-imagenet':
+        train_data, test_data = get_tiny_imagenet(root=root,**kwargs)
+    elif dataset == 'imagenet':
+        train_data, test_data = get_imagenet(root=root,**kwargs)
+    else:
+        raise NotImplementedError
+
+    num_classes = _DATASET_CFG[dataset]['num_classes']
+
+    if label_noise > 0:
+        num_canaries_train = math.floor(len(train_data) * label_noise)
+        train_data = LabelNoiseDataset(train_data, n_labels=num_classes, label_noise=num_canaries_train)
+        num_canaries_test = math.floor(len(test_data) * label_noise)
+        test_data = LabelNoiseDataset(test_data, n_labels=num_classes, label_noise=num_canaries_test)
+
+    if np.abs(train_subset) < 1:
+        n = len(train_data)
+        ns = int(n * np.abs(train_subset))
+
+        randperm = np.load(indices_path) if indices_path is not None else torch.randperm(n)
+        assert len(randperm) == n, f'Permutation length {len(randperm)} does not match dataset length {n}'
+
+        ## NOTE: -ve train_subset fraction to get latter segment.
+        randperm = randperm[ns:] if train_subset < 0 else randperm[:ns]
+        train_data = Subset(train_data, randperm)
+
+    logging.info(f'Train Dataset Size: {len(train_data)};  Test Dataset Size: {len(test_data)}')
+
+    setattr(train_data, 'num_classes', num_classes)
+    return train_data, test_data
+
 
 
 def get_mnist(root=None, extra_transform=None, **_):

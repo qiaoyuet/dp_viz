@@ -16,7 +16,7 @@ import numpy as np
 from pactl.distributed import maybe_launch_distributed
 from pactl.logging import set_logging, wandb, finish_logging
 from pactl.random import random_seed_all
-from pactl.data import get_dataset
+from pactl.data import get_dataset, get_dataset_with_canaries
 from pactl.train_utils import eval_model
 from pactl.nn import create_model
 from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
@@ -33,10 +33,16 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
          dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000,
-         audit=False, audit_size=5000):
+         audit=False, audit_size=1000, canary_prob=-1):
     random_seed_all(seed)
 
-    train_data, test_data = get_dataset(
+    # inserting canaries to both train and test data
+    # train_data, test_data = get_dataset(
+    #     dataset, root=data_dir,
+    #     train_subset=train_subset,
+    #     label_noise=label_noise,
+    #     indices_path=indices_path)
+    train_data, test_data = get_dataset_with_canaries(
         dataset, root=data_dir,
         train_subset=train_subset,
         label_noise=label_noise,
