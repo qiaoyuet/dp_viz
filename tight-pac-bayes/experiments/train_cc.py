@@ -16,7 +16,7 @@ import numpy as np
 from pactl.distributed import maybe_launch_distributed
 from pactl.logging import set_logging, wandb, finish_logging
 from pactl.random import random_seed_all
-from pactl.data import get_dataset
+from pactl.data import get_dataset, get_dataset_with_canaries
 from pactl.train_utils import eval_model
 from pactl.nn import create_model
 from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
