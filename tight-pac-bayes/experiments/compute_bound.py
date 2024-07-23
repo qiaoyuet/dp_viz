@@ -7,7 +7,7 @@ from pactl.distributed import maybe_launch_distributed
 from pactl.logging import set_logging, finish_logging
 from pactl.random import random_seed_all
 from pactl.data import get_dataset
-from pactl.nn import create_model
+from pactl.nn import create_model, create_model_tmp
 from pactl.bounds.get_bound_from_chk_v2 import evaluate_idmodel
 
 
@@ -31,6 +31,7 @@ def main(
     num_workers=4,
     distributed=False,
     exp_name='tmp',
+    ckpt_name=None
 ):
 
     random_seed_all(seed)
@@ -39,11 +40,15 @@ def main(
                                         root=data_dir,
                                         train_subset=train_subset,
                                         indices_path=indices_path)
-
-    net = create_model(cfg_path=prenet_cfg_path,
-                       device_id=device_id,
-                       log_dir=log_dir,
-                       compute_bound=True)
+    # net = create_model(cfg_path=prenet_cfg_path,
+    #                    device_id=device_id,
+    #                    log_dir=log_dir,
+    #                    compute_bound=True,
+    #                    ckpt_name=ckpt_name)
+    net = create_model_tmp(cfg_path=prenet_cfg_path,
+                           device_id=device_id,
+                           log_dir=log_dir,
+                           ckpt_name=ckpt_name)
     if distributed:
         net = torch.nn.parallel.DistributedDataParallel(net,
                                                         device_ids=[device_id],

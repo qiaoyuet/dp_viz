@@ -18,7 +18,7 @@ from pactl.logging import set_logging, wandb, finish_logging
 from pactl.random import random_seed_all
 from pactl.data import get_dataset, get_dataset_with_canaries
 from pactl.train_utils import eval_model
-from pactl.nn import create_model
+from pactl.nn import create_model, create_model_tmp
 from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
 from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
@@ -62,12 +62,16 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers,
                              sampler=DistributedSampler(test_data) if distributed else None)  # use test data as non-mem audit set
 
-    net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
+    # net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
+    #                    base_width=base_width,
+    #                    seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
+    #                    cfg_path=cfg_path, ckpt_name=ckpt_name,
+    #                    transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name
+    #                    )
+    net = create_model_tmp(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
                        base_width=base_width,
                        seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
-                       cfg_path=cfg_path, ckpt_name=ckpt_name,
-                       transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name
-                       )
+                       cfg_path=cfg_path, transfer=transfer, device_id=device_id, log_dir=log_dir)
     if distributed:
         # net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device_id], broadcast_buffers=True)
