@@ -76,8 +76,8 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     # Step 1: Find t_pos that maximizes precision for positive predictions
     best_precision = 0
     best_t_pos = 0
-    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
-    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.5)
+    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
+    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.5)
     results, recall = [], []
     best_accuracy = 0
     best_t_neg = 0
