@@ -22,6 +22,8 @@ from pactl.bounds.compute_kl_mixture import get_gains
 from pactl.data import get_dataset, get_data_dir
 import torch.nn.functional as F
 
+from experiments.auditing_utils import find_O1_pred
+
 # def eval_acc(model, loader, subsample=False):
 #     model.eval()
 #     with torch.no_grad():
@@ -156,14 +158,17 @@ def evaluate_idmodel(
     use_kmeans=False,
     distributed=False,
     log_dir=None,
+    audit=False,
+    mem_loader=None,
+    non_mem_loader=None
 ):
 
-    train_acc = eval_model(model, trainloader, device_id=device, distributed=distributed)[0]['acc']
-    if log_dir is not None:
-        logging.info(f'Train accuracy: {train_acc:.4f}')
-    test_acc = eval_model(model, testloader, device_id=device, distributed=distributed)[0]['acc']
-    if log_dir is not None:
-        logging.info(f'Test accuracy: {test_acc:.4f}')
+    # train_acc = eval_model(model, trainloader, device_id=device, distributed=distributed)[0]['acc']
+    # if log_dir is not None:
+    #     logging.info(f'Train accuracy: {train_acc:.4f}')
+    # test_acc = eval_model(model, testloader, device_id=device, distributed=distributed)[0]['acc']
+    # if log_dir is not None:
+    #     logging.info(f'Test accuracy: {test_acc:.4f}')
 
     quantized_vec, message_len = compute_quantization(model, levels, device, trainloader, epochs,
                                                       lr, use_kmeans)
@@ -194,13 +199,23 @@ def evaluate_idmodel(
                                     posterior_scale=posterior_scale, use_robust_adj=False,
                                     log_dir=log_dir, distributed=distributed)
     raw_output = {f'raw_{name}': value for name, value in raw_output.items()}
+
+    if audit:
+        # t0 = time.time()
+        _, mem_losses = eval_model(model, mem_loader, device_id=device, distributed=distributed, audit=True)
+        _, non_mem_losses = eval_model(model, non_mem_loader, device_id=device, distributed=distributed, audit=True)
+        audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+        logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
+        # t1 = time.time()
+        # print("+++++++++++++++++: {}".format(t1 - t0))
+
     return {
         # **output,
         **raw_output,
         'train_nll_bits': train_nll_bits,
         'prefix_message_len': prefix_message_len,
-        'train_err_100': (1. - train_acc) * 100,
-        'test_err_100': (1 - test_acc) * 100
+        # 'train_err_100': (1. - train_acc) * 100,
+        # 'test_err_100': (1 - test_acc) * 100
     }
 
 

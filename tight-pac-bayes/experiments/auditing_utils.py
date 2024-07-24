@@ -2,6 +2,19 @@ import numpy as np
 import math
 import scipy
 from tqdm import tqdm
+from torch.utils.data import Subset
+
+
+def generate_auditing_data(train_data, audit_size):
+    np.random.seed(1024)
+    audit_index = np.random.choice(list(range(0, len(train_data))), size=audit_size, replace=False)
+    non_sampled_index = list(set(list(range(0, len(train_data)))) - set(audit_index))
+    bernoulli_index = np.random.binomial(n=1, p=0.5, size=len(audit_index))
+    non_mem_index = audit_index[np.where(bernoulli_index == 1)]
+    mem_index = list(audit_index[np.where(bernoulli_index == 0)]) + non_sampled_index
+    member_data = Subset(train_data, mem_index)
+    non_mem_data = Subset(train_data, non_mem_index)
+    return member_data, non_mem_data
 
 
 def p_value_DP_audit(m, r, v, eps, delta=0):
@@ -76,8 +89,8 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     # Step 1: Find t_pos that maximizes precision for positive predictions
     best_precision = 0
     best_t_pos = 0
-    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
-    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.5)
+    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
+    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.05)
     results, recall = [], []
     best_accuracy = 0
     best_t_neg = 0

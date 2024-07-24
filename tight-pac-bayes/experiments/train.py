@@ -23,7 +23,7 @@ from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
 from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
 
-from experiments.auditing_utils import find_O1_pred
+from experiments.auditing_utils import find_O1_pred, generate_auditing_data
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
@@ -33,7 +33,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          intrinsic_dim=0, intrinsic_mode='filmrdkron',
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
          dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000,
-         audit=False, audit_size=1000, canary_prob=-1):
+         audit=False, audit_size=1000):
     random_seed_all(seed)
 
     # inserting canaries to both train and test data
@@ -49,12 +49,11 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         indices_path=indices_path)
 
     if audit:
-        mem_index = np.random.choice(list(range(0, len(train_data))), size=audit_size // 2)
-        non_mem_index = np.random.choice(list(range(0, len(test_data))), size=audit_size // 2)
-        mem_data = Subset(train_data, mem_index)
-        non_mem_data = Subset(test_data, non_mem_index)
+        mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=audit_size)
         mem_loader = DataLoader(mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
         non_mem_loader = DataLoader(non_mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+        logging.info({'num_member': len(mem_data), 'num_non_member': len(non_mem_data)},
+                     extra=dict(wandb=True, prefix='audit'))
 
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=not distributed,
@@ -147,6 +146,14 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         else:
             raise ValueError('Either specify noise multiplier or target epsilon.')
 
+    if audit:
+        # compute initial loss value as auditing score baseline (optional)
+        # make sure shuffle is False in data loaders
+        _, init_mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
+                                        distributed=distributed, audit=True)
+        _, init_non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
+                                            distributed=distributed, audit=True)
+
     best_train_acc_so_far = 0.
     best_test_acc_so_far = 0.
     step_counter = 0
@@ -179,15 +186,18 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                     logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
 
                     if audit:
-                        # save interm ckpts
-                        torch.save(net.state_dict(),
-                                   Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+                        # # save interm ckpts
+                        # torch.save(net.state_dict(),
+                        #            Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
 
                         # t0 = time.time()
-                        _, mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
-                                                   distributed=distributed, audit=True)
-                        _, non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
+                        # fixme: might be quicker if save mem index instead of re-eval
+                        _, cur_mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
                                                        distributed=distributed, audit=True)
+                        _, cur_non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
+                                                           distributed=distributed, audit=True)
+                        mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
+                        non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                         audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
                         # t1 = time.time()
