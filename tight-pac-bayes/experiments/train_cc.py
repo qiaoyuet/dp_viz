@@ -18,7 +18,7 @@ from pactl.logging import set_logging, wandb, finish_logging
 from pactl.random import random_seed_all
 from pactl.data import get_dataset, get_dataset_with_canaries
 from pactl.train_utils import eval_model
-from pactl.nn import create_model
+from pactl.nn import create_model, create_model_tmp
 from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
 from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
