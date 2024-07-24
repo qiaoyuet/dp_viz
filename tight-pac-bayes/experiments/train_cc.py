@@ -25,7 +25,7 @@ from pactl.optim.schedulers import construct_warm_stable_cosine
 
 import os, sys
 sys.path.append('/home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/dp_viz/tight-pac-bayes/experiments')
-from auditing_utils import find_O1_pred
+from auditing_utils import find_O1_pred, generate_auditing_data
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
