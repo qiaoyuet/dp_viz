@@ -190,11 +190,10 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
 
                     if audit:
                         # # save interm ckpts
-                        # torch.save(net.state_dict(),
-                        #            Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+                        torch.save(net.state_dict(),
+                                   Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
 
                         # t0 = time.time()
-                        # fixme: might be quicker if save mem index instead of re-eval
                         _, cur_mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
                                                        distributed=distributed, audit=True)
                         _, cur_non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
