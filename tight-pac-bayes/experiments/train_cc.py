@@ -36,6 +36,12 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
          warmup_epochs=0, warmup_lr=.1, non_private=True, target_epsilon=-1, dp_C=1.0, dp_noise=-1,
          dp_virtual_batch_size=128, ckpt_every=[], exp_name='tmp', eval_every=1000,
          audit=False, audit_size=1000):
+
+    if log_dir is not None:
+        ckpt_path = os.path.join(log_dir, exp_name)
+        if not os.path.exists(ckpt_path):
+            os.mkdir(ckpt_path)
+
     random_seed_all(seed)
 
     # inserting canaries to both train and test data
