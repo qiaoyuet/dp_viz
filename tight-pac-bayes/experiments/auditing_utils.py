@@ -12,6 +12,7 @@ def generate_auditing_data(train_data, audit_size):
     bernoulli_index = np.random.binomial(n=1, p=0.5, size=len(audit_index))
     non_mem_index = audit_index[np.where(bernoulli_index == 1)]
     mem_index = list(audit_index[np.where(bernoulli_index == 0)]) + non_sampled_index
+    # mem_index = list(audit_index[np.where(bernoulli_index == 0)])  # looser results but fast
     member_data = Subset(train_data, mem_index)
     non_mem_data = Subset(train_data, non_mem_index)
     return member_data, non_mem_data
@@ -90,7 +91,9 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     best_precision = 0
     best_t_pos = 0
     # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
-    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.05)
+    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.05)
+    # use fixed length threshold
+    threshold_range = np.linspace(start=np.min(all_losses), stop=np.max(all_losses) + 0.01, num=10)
     results, recall = [], []
     best_accuracy = 0
     best_t_neg = 0

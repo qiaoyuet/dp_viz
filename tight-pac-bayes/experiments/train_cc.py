@@ -179,10 +179,13 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                 #     logging.info(metrics, extra=dict(wandb=True, prefix='train'))
 
                 if log_dir is not None and step_counter % eval_every == 0:
+                    # t0 = time.time()
                     train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id,
                                                   distributed=distributed, audit=False)
                     test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id,
                                                  distributed=distributed, audit=False)
+                    # t1 = time.time()
+                    # print("++++++++ logging eval +++++++++: {}".format(t1 - t0))
                     train_metrics.update({'epoch': e, 'step': step_counter})
                     logging.info(train_metrics, extra=dict(wandb=True, prefix='train'))
                     logging.info(test_metrics, extra=dict(wandb=True, prefix='test'))
@@ -198,12 +201,15 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                                                        distributed=distributed, audit=True)
                         _, cur_non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
                                                            distributed=distributed, audit=True)
+                        # t1 = time.time()
+                        # print("++++++++ audit eval +++++++++: {}".format(t1 - t0))
                         mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                         non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                         audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
-                        # t1 = time.time()
-                        # print("+++++++++++++++++: {}".format(t1 - t0))
+                        # t2 = time.time()
+                        # print("++++++++ audit +++++++++: {}".format(t2 - t1))
+
         else:
             with BatchMemoryManager(
                     data_loader=train_loader,
