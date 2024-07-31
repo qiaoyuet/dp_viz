@@ -25,7 +25,7 @@ from pactl.optim.schedulers import construct_warm_stable_cosine
 
 import os, sys
 sys.path.append('/home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/dp_viz/tight-pac-bayes/experiments')
-from auditing_utils import find_O1_pred, generate_auditing_data
+from auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_quick
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
@@ -69,16 +69,16 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers,
                              sampler=DistributedSampler(test_data) if distributed else None)  # use test data as non-mem audit set
 
-    # net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
-    #                    base_width=base_width,
-    #                    seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
-    #                    cfg_path=cfg_path, ckpt_name=ckpt_name,
-    #                    transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name
-    #                    )
-    net = create_model_tmp(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
+    net = create_model(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
                        base_width=base_width,
                        seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
-                       cfg_path=cfg_path, transfer=transfer, device_id=device_id, log_dir=log_dir)
+                       cfg_path=cfg_path, ckpt_name=ckpt_name,
+                       transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name
+                       )
+    # net = create_model_tmp(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
+    #                    base_width=base_width,
+    #                    seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
+    #                    cfg_path=cfg_path, transfer=transfer, device_id=device_id, log_dir=log_dir)
     if distributed:
         # net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = nn.parallel.DistributedDataParallel(net, device_ids=[device_id], broadcast_buffers=True)
@@ -210,7 +210,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                         # print("++++++++ audit eval +++++++++: {}".format(t1 - t0))
                         mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                         non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
-                        audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                        # audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                        audit_metrics = find_O1_pred_quick(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
                         # t2 = time.time()
                         # print("++++++++ audit +++++++++: {}".format(t2 - t1))

@@ -11,8 +11,8 @@ def generate_auditing_data(train_data, audit_size):
     non_sampled_index = list(set(list(range(0, len(train_data)))) - set(audit_index))
     bernoulli_index = np.random.binomial(n=1, p=0.5, size=len(audit_index))
     non_mem_index = audit_index[np.where(bernoulli_index == 1)]
-    mem_index = list(audit_index[np.where(bernoulli_index == 0)]) + non_sampled_index
-    # mem_index = list(audit_index[np.where(bernoulli_index == 0)])  # looser results but fast
+    # mem_index = list(audit_index[np.where(bernoulli_index == 0)]) + non_sampled_index
+    mem_index = list(audit_index[np.where(bernoulli_index == 0)])  # looser results but fast
     member_data = Subset(train_data, mem_index)
     non_mem_data = Subset(train_data, non_mem_index)
     return member_data, non_mem_data
@@ -84,16 +84,15 @@ def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
     sorted_losses = all_losses[ind]
     sorted_labels = all_labels[ind]
 
+    correct_predictions = 0
+    best_t_pos, best_t_neg = None, None
+    num_guesses = None
+    p = 0.05
     # # fixme: optimize for non_member scores first
-    # correct_predictions = 0
-    # best_t_pos, best_t_neg = None, None
-    # num_guesses = None
-    # p = 0.05
     # cur_best_true_negatives = 0
     # for t_neg in tqdm(range(0, len(sorted_losses))):
     #     true_negatives = np.sum(sorted_labels[:(t_neg+1)] == 0)
     #     if true_negatives > cur_best_true_negatives
-
 
     for t_pos in tqdm(range(0, len(sorted_losses))):
         for t_neg in reversed(range(0, len(sorted_losses))):
