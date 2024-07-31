@@ -70,6 +70,59 @@ def get_eps_audit(m, r, v, p, delta):
     return eps_min
 
 
+def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
+    # Create labels for real and generated loss values
+    member_labels = np.ones_like(member_loss_values)
+    non_member_labels = np.zeros_like(non_member_loss_values)
+
+    # Concatenate loss values and labels
+    all_losses = np.concatenate((member_loss_values, non_member_loss_values))
+    all_labels = np.concatenate((member_labels, non_member_labels))
+
+    # sort loss values
+    ind = np.argsort(all_losses)  # accending order
+    sorted_losses = all_losses[ind]
+    sorted_labels = all_labels[ind]
+
+    # # fixme: optimize for non_member scores first
+    # correct_predictions = 0
+    # best_t_pos, best_t_neg = None, None
+    # num_guesses = None
+    # p = 0.05
+    # cur_best_true_negatives = 0
+    # for t_neg in tqdm(range(0, len(sorted_losses))):
+    #     true_negatives = np.sum(sorted_labels[:(t_neg+1)] == 0)
+    #     if true_negatives > cur_best_true_negatives
+
+
+    for t_pos in tqdm(range(0, len(sorted_losses))):
+        for t_neg in reversed(range(0, len(sorted_losses))):
+            if t_neg < t_pos:
+                continue
+            true_positives = np.sum(sorted_labels[:(t_pos+1)] == 1)
+            true_negatives = np.sum(sorted_labels[-t_neg:] == 0)
+            cur_correct_predictions = true_positives + true_negatives
+            if cur_correct_predictions > correct_predictions:
+                correct_predictions = cur_correct_predictions
+                best_t_pos = t_pos
+                best_t_neg = t_neg
+                num_guesses = (t_pos+1) + t_neg
+
+    if num_guesses is not None:
+        eps = get_eps_audit(len(all_labels), num_guesses, correct_predictions, p, delta)
+    else:
+        eps = None
+
+    metric = {
+        'audit_eps': eps, 'threshold_t_neg': sorted_losses[-best_t_neg],
+        'threshold_t_pos': sorted_losses[(best_t_pos+1)],
+        'best_accuracy': correct_predictions / num_guesses,
+        'total_predictions': num_guesses, 'correct_predictions': correct_predictions
+    }
+
+    return metric
+
+
 def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     """
     Args:

@@ -23,7 +23,7 @@ from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
 from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
 
-from experiments.auditing_utils import find_O1_pred, generate_auditing_data
+from experiments.auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_quick
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
@@ -196,22 +196,23 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
 
                     if audit:
                         # # save interm ckpts
-                        torch.save(net.state_dict(),
-                                   Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+                        # torch.save(net.state_dict(),
+                        #            Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
 
-                        # t0 = time.time()
+                        t0 = time.time()
                         _, cur_mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
                                                        distributed=distributed, audit=True)
                         _, cur_non_mem_losses = eval_model(net, non_mem_loader, criterion, device_id=device_id,
                                                            distributed=distributed, audit=True)
-                        # t1 = time.time()
-                        # print("++++++++ audit eval +++++++++: {}".format(t1 - t0))
+                        t1 = time.time()
+                        print("++++++++ audit eval +++++++++: {}".format(t1 - t0))
                         mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                         non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
-                        audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                        # audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                        audit_metrics = find_O1_pred_quick(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
-                        # t2 = time.time()
-                        # print("++++++++ audit +++++++++: {}".format(t2 - t1))
+                        t2 = time.time()
+                        print("++++++++ audit +++++++++: {}".format(t2 - t1))
 
         else:
             with BatchMemoryManager(
