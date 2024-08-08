@@ -356,40 +356,40 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
         # recalls = true_positives / np.sum(all_labels == 1)
         # recall.append(recalls)
 
-    # unnest inside loop for faster computation
-    # Step 2: With t_pos fixed, find t_neg that maximizes overall accuracy
-    for t_neg in tqdm(reversed(threshold_range)):
-        if t_neg <= best_t_pos:
-            break
-        confident_predictions = all_losses[(all_losses <= best_t_pos) | (all_losses >= t_neg)]
-        r = len(confident_predictions)
-        mask_pos = (confident_predictions <= best_t_pos) & (
-                    all_labels[(all_losses <= best_t_pos) | (all_losses >= t_neg)] == 1)
-        mask_neg = (confident_predictions >= t_neg) & (
-                    all_labels[(all_losses <= best_t_pos) | (all_losses >= t_neg)] == 0)
+        # unnest inside loop for faster computation
+        # Step 2: With t_pos fixed, find t_neg that maximizes overall accuracy
+        for t_neg in tqdm(reversed(threshold_range)):
+            if t_neg <= best_t_pos:
+                break
+            confident_predictions = all_losses[(all_losses <= best_t_pos) | (all_losses >= t_neg)]
+            r = len(confident_predictions)
+            mask_pos = (confident_predictions <= best_t_pos) & (
+                        all_labels[(all_losses <= best_t_pos) | (all_losses >= t_neg)] == 1)
+            mask_neg = (confident_predictions >= t_neg) & (
+                        all_labels[(all_losses <= best_t_pos) | (all_losses >= t_neg)] == 0)
 
-        v = np.sum(np.logical_or(mask_pos, mask_neg))
+            v = np.sum(np.logical_or(mask_pos, mask_neg))
 
-        if r > 0:
-            accuracy = v / r
-            eps = get_eps_audit(len(all_labels), r, v, p, delta)
-            if eps > best_eps:
-                best_eps = eps
-                best_t_neg = t_neg
-                total_predictions = r
-                correct_predictions = v
-            if accuracy > best_accuracy:
-                best_accuracy = accuracy
+            if r > 0:
+                accuracy = v / r
+                eps = get_eps_audit(len(all_labels), r, v, p, delta)
+                if eps > best_eps:
+                    best_eps = eps
+                    best_t_neg = t_neg
+                    total_predictions = r
+                    correct_predictions = v
+                if accuracy > best_accuracy:
+                    best_accuracy = accuracy
 
-        # results.append({
-        #     't_pos': t_pos,
-        #     't_neg': best_t_neg,
-        #     'best_precision': precision,
-        #     'best_accuracy': best_accuracy,
-        #     'recall': recall,
-        #     'total_predictions': r,
-        #     'correct_predictions': v
-        # })  # suppress logging
+            # results.append({
+            #     't_pos': t_pos,
+            #     't_neg': best_t_neg,
+            #     'best_precision': precision,
+            #     'best_accuracy': best_accuracy,
+            #     'recall': recall,
+            #     'total_predictions': r,
+            #     'correct_predictions': v
+            # })  # suppress logging
 
     metric = {
         'best_eps': best_eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
