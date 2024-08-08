@@ -23,7 +23,7 @@ from pactl.optim.third_party.functional_warm_up import LinearWarmupScheduler
 from pactl.optim.schedulers import construct_stable_cosine
 from pactl.optim.schedulers import construct_warm_stable_cosine
 
-from experiments.auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_quick
+from experiments.auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_quick, insert_canaries
 
 
 def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
@@ -43,19 +43,21 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
     random_seed_all(seed)
 
     # inserting canaries to both train and test data
-    # train_data, test_data = get_dataset(
+    train_data, test_data = get_dataset(
+        dataset, root=data_dir,
+        train_subset=train_subset,
+        label_noise=0,
+        indices_path=indices_path)
+    # train_data, test_data = get_dataset_with_canaries(
     #     dataset, root=data_dir,
     #     train_subset=train_subset,
     #     label_noise=label_noise,
     #     indices_path=indices_path)
-    train_data, test_data = get_dataset_with_canaries(
-        dataset, root=data_dir,
-        train_subset=train_subset,
-        label_noise=label_noise,
-        indices_path=indices_path)
 
     if audit:
-        mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=audit_size)
+        mem_data, non_mem_data, train_data = insert_canaries(train_data, num_classes=train_data.num_classes,
+                                                             audit_size=audit_size, label_noise=label_noise)
+        # mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=audit_size)
         mem_loader = DataLoader(mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
         non_mem_loader = DataLoader(non_mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
         logging.info({'num_member': len(mem_data), 'num_non_member': len(non_mem_data)},
@@ -73,6 +75,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                        cfg_path=cfg_path, ckpt_name=ckpt_name,
                        transfer=transfer, device_id=device_id, log_dir=log_dir, exp_name=exp_name
                        )
+    # total_nparams = sum(p.numel() for p in net.parameters())  # res18: 11173962
+
     # net = create_model_tmp(model_name=model_name, num_classes=train_data.num_classes, in_chans=train_data[0][0].size(0),
     #                    base_width=base_width,
     #                    seed=seed, intrinsic_dim=intrinsic_dim, intrinsic_mode=intrinsic_mode,
@@ -196,8 +200,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
 
                     if audit:
                         # # save interm ckpts
-                        torch.save(net.state_dict(),
-                                   Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+                        if intrinsic_dim > 0:
+                            torch.save(net.state_dict(),
+                                       Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
 
                         # t0 = time.time()
                         _, cur_mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,

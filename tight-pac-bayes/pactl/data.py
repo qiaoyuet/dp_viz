@@ -226,7 +226,6 @@ def get_dataset_with_canaries(dataset, root=None, train_subset=1, label_noise=0,
     return train_data, test_data
 
 
-
 def get_mnist(root=None, extra_transform=None, **_):
     datasets = []
     for split in ['train', 'test']:

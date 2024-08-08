@@ -1,10 +1,67 @@
-import numpy as np
 import math
 import scipy
 from tqdm import tqdm
-from torch.utils.data import Subset
+import os
+import logging
+import numpy as np
+import torch
+from torch.utils.data import Dataset, Subset, ConcatDataset
+from pactl.data import WrapperDataset
 
 
+class CanariesDataset(WrapperDataset):
+    def __init__(self, dataset, n_labels=10, num_canaries=0):
+        super().__init__(dataset)
+
+        self.C = n_labels
+        # self.data = dataset.data
+
+        if num_canaries > 0:
+            labels = np.array(self.targets)
+            mask = np.arange(0, len(labels)) < num_canaries
+            np.random.seed(1024)
+            np.random.shuffle(mask)
+            rnd_labels = np.random.choice(self.C, mask.sum())
+            labels[mask] = rnd_labels
+            # we need to explicitly cast the labels from npy.int64 to
+            # builtin int type, otherwise pytorch will fail...
+            labels = [int(x) for x in labels]
+            self.noisy_targets = labels
+
+    def __getitem__(self, i):
+        X, y = super().__getitem__(i)
+        y = self.noisy_targets[i]
+        return X, y
+
+
+def insert_canaries(train_data, num_classes, audit_size, label_noise=1):
+    np.random.seed(1024)
+    audit_index = np.random.choice(list(range(0, len(train_data))), size=audit_size, replace=False)  # m
+    non_sampled_index = list(set(list(range(0, len(train_data)))) - set(audit_index))  # n-m
+    # flip bernoulli coin
+    bernoulli_index = np.random.binomial(n=1, p=0.5, size=len(audit_index))
+    non_mem_index = audit_index[np.where(bernoulli_index == 0)]
+    mem_index = audit_index[np.where(bernoulli_index == 1)]
+    new_train_index = list(mem_index) + non_sampled_index
+    # split data
+    new_train_data = Subset(train_data, new_train_index)
+    new_train_data.num_classes = num_classes
+    mem_data = Subset(train_data, mem_index)
+    mem_data.data = train_data.data[list(mem_index)]
+    mem_data.targets = list(np.array(train_data.targets)[list(mem_index)])
+    non_mem_data = Subset(train_data, non_mem_index)
+    non_mem_data.data = train_data.data[list(non_mem_index)]
+    non_mem_data.targets = list(np.array(train_data.targets)[list(non_mem_index)])
+    # insert canary
+    num_canaries_mem = math.floor(len(mem_data) * label_noise)
+    mem_data_canary = CanariesDataset(mem_data, n_labels=num_classes, num_canaries=num_canaries_mem)
+    num_canaries_non_mem = math.floor(len(non_mem_data) * label_noise)
+    non_mem_data_canary = CanariesDataset(non_mem_data, n_labels=num_classes, num_canaries=num_canaries_non_mem)
+
+    return mem_data_canary, non_mem_data_canary, new_train_data
+
+
+# deprecated
 def generate_auditing_data(train_data, audit_size):
     np.random.seed(1024)
     audit_index = np.random.choice(list(range(0, len(train_data))), size=audit_size, replace=False)
@@ -12,7 +69,7 @@ def generate_auditing_data(train_data, audit_size):
     bernoulli_index = np.random.binomial(n=1, p=0.5, size=len(audit_index))
     non_mem_index = audit_index[np.where(bernoulli_index == 1)]
     # mem_index = list(audit_index[np.where(bernoulli_index == 0)]) + non_sampled_index
-    mem_index = list(audit_index[np.where(bernoulli_index == 0)])  # looser results but fast
+    mem_index = list(audit_index[np.where(bernoulli_index == 0)])
     member_data = Subset(train_data, mem_index)
     non_mem_data = Subset(train_data, non_mem_index)
     return member_data, non_mem_data
@@ -70,7 +127,92 @@ def get_eps_audit(m, r, v, p, delta):
     return eps_min
 
 
+# def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
+#     # Create labels for real and generated loss values
+#     member_labels = np.ones_like(member_loss_values)
+#     non_member_labels = np.zeros_like(non_member_loss_values)
+#
+#     # Concatenate loss values and labels
+#     all_losses = np.concatenate((member_loss_values, non_member_loss_values))
+#     all_labels = np.concatenate((member_labels, non_member_labels))
+#
+#     # sort loss values
+#     ind = np.argsort(all_losses)[::-1]  # descending order
+#     sorted_losses = all_losses[ind]
+#     sorted_labels = all_labels[ind]
+#
+#     best_acc = 0
+#     best_t_pos, best_t_neg = None, None
+#     num_guesses = 0
+#     p = 0.05
+#     correct_predictions = 0
+#     # # fixme: optimize for non_member scores first
+#     # cur_best_true_negatives = 0
+#     # for t_neg in tqdm(range(0, len(sorted_losses))):
+#     #     true_negatives = np.sum(sorted_labels[:(t_neg+1)] == 0)
+#     #     if true_negatives > cur_best_true_negatives
+#
+#     tmp_array = []
+#     for t_pos in tqdm(range(5, len(sorted_losses))):
+#         for t_neg in range(5, len(sorted_losses)):
+#             if t_neg > (len(sorted_losses) - t_pos - 2):
+#                 break
+#             else:
+#                 tmp_array.append((t_pos, t_neg))
+#
+#     for (t_pos, t_neg) in tmp_array:
+#         true_positives = np.sum(sorted_labels[:(t_pos+1)] == 1)
+#         true_negatives = np.sum(sorted_labels[-(t_neg+1):] == 0)
+#         cur_correct_predictions = true_positives + true_negatives
+#         cur_num_guesses = (t_pos+1) + (t_neg+1)
+#         cur_acc = cur_correct_predictions / cur_num_guesses
+#         if cur_acc > best_acc:
+#             correct_predictions = cur_correct_predictions
+#             best_t_pos = t_pos
+#             best_t_neg = t_neg
+#             num_guesses = cur_num_guesses
+#             best_acc = cur_acc
+#
+#
+#     # for t_pos in tqdm(range(5, len(sorted_losses))):
+#     #     for t_neg in range(5, len(sorted_losses)):
+#     #         if t_neg > (len(sorted_losses) - t_pos - 2):
+#     #             break
+#     #         true_positives = np.sum(sorted_labels[:(t_pos+1)] == 1)
+#     #         true_negatives = np.sum(sorted_labels[-(t_neg+1):] == 0)
+#     #         cur_correct_predictions = true_positives + true_negatives
+#     #         cur_num_guesses = (t_pos+1) + (t_neg+1)
+#     #         cur_acc = cur_correct_predictions / cur_num_guesses
+#     #         if cur_acc > best_acc:
+#     #             correct_predictions = cur_correct_predictions
+#     #             best_t_pos = t_pos
+#     #             best_t_neg = t_neg
+#     #             num_guesses = cur_num_guesses
+#
+#     if num_guesses is not None:
+#         eps = get_eps_audit(len(sorted_labels), num_guesses, correct_predictions, p, delta)
+#     else:
+#         eps = None
+#
+#     metric = {
+#         'audit_eps': eps, 'threshold_t_neg': sorted_losses[-(best_t_neg+1)],
+#         'threshold_t_pos': sorted_losses[(best_t_pos+1)],
+#         'best_accuracy': best_acc,
+#         'total_predictions': num_guesses, 'correct_predictions': correct_predictions
+#     }
+#
+#     return metric
+
+
 def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
+    """
+    Args:
+        member_loss_values: NumPy array containing member loss values
+        non_member_loss_values: NumPy array containing non_member loss values
+    Returns:
+     best_eps: largest audit (epsilon) value that can be returned for a particular p value
+    """
+
     # Create labels for real and generated loss values
     member_labels = np.ones_like(member_loss_values)
     non_member_labels = np.zeros_like(non_member_loss_values)
@@ -79,46 +221,91 @@ def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
     all_losses = np.concatenate((member_loss_values, non_member_loss_values))
     all_labels = np.concatenate((member_labels, non_member_labels))
 
-    # sort loss values
-    ind = np.argsort(all_losses)  # accending order
-    sorted_losses = all_losses[ind]
-    sorted_labels = all_labels[ind]
-
+    # Step 1: Find t_pos that maximizes precision for positive predictions
+    best_precision = 0
+    best_t_pos = 0
+    # threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.01)
+    threshold_range = np.arange(np.min(all_losses), np.max(all_losses) + 0.01, 0.05)
+    # use fixed length threshold
+    # threshold_range = np.linspace(start=np.min(all_losses), stop=np.max(all_losses) + 0.01, num=20)
+    results, recall = [], []
+    best_accuracy = 0
+    best_t_neg = 0
+    total_predictions = 0
     correct_predictions = 0
-    best_t_pos, best_t_neg = None, None
-    num_guesses = None
+    best_eps = 0
     p = 0.05
-    # # fixme: optimize for non_member scores first
-    # cur_best_true_negatives = 0
-    # for t_neg in tqdm(range(0, len(sorted_losses))):
-    #     true_negatives = np.sum(sorted_labels[:(t_neg+1)] == 0)
-    #     if true_negatives > cur_best_true_negatives
+    tmp_best_tp = 0
+    for t_pos in tqdm(threshold_range):
+        positive_predictions = all_losses[all_losses <= t_pos]
+        if len(positive_predictions) == 0:
+            continue
 
-    for t_pos in tqdm(range(0, len(sorted_losses))):
-        for t_neg in reversed(range(0, len(sorted_losses))):
-            if t_neg < t_pos:
-                continue
-            true_positives = np.sum(sorted_labels[:(t_pos+1)] == 1)
-            true_negatives = np.sum(sorted_labels[-t_neg:] == 0)
-            cur_correct_predictions = true_positives + true_negatives
-            if cur_correct_predictions > correct_predictions:
-                correct_predictions = cur_correct_predictions
-                best_t_pos = t_pos
+        true_positives = np.sum(all_labels[all_losses <= t_pos] == 1)
+
+        # eps = get_eps_audit(len(all_labels), len(positive_predictions), true_positives, p, delta)
+        # # precision = true_positives / len(positive_predictions)
+        # if eps > best_eps:
+        #     print("EPSILON UPDATE:", eps)
+        #     best_eps = eps
+        #     best_t_pos = t_pos
+        # # recalls = true_positives / np.sum(all_labels == 1)
+        # # recall.append(recalls)
+        if true_positives > tmp_best_tp:
+            tmp_best_tp = true_positives
+            best_t_pos = t_pos
+
+    # unnest inside loop for faster computation
+    # Step 2: With t_pos fixed, find t_neg that maximizes overall accuracy
+    for t_neg in tqdm(reversed(threshold_range)):
+        if t_neg <= best_t_pos:
+            break
+        confident_predictions = all_losses[(all_losses <= best_t_pos) | (all_losses >= t_neg)]
+        r = len(confident_predictions)
+        mask_pos = (confident_predictions <= best_t_pos) & (
+                    all_labels[(all_losses <= best_t_pos) | (all_losses >= t_neg)] == 1)
+        mask_neg = (confident_predictions >= t_neg) & (
+                    all_labels[(all_losses <= best_t_pos) | (all_losses >= t_neg)] == 0)
+
+        v = np.sum(np.logical_or(mask_pos, mask_neg))
+
+        if r > 0:
+            accuracy = v / r
+            # eps = get_eps_audit(len(all_labels), r, v, p, delta)
+            # if eps > best_eps:
+            #     best_eps = eps
+            #     best_t_neg = t_neg
+            #     total_predictions = r
+            #     correct_predictions = v
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
                 best_t_neg = t_neg
-                num_guesses = (t_pos+1) + t_neg
+                total_predictions = r
+                correct_predictions = v
 
-    if num_guesses is not None:
-        eps = get_eps_audit(len(all_labels), num_guesses, correct_predictions, p, delta)
-    else:
-        eps = None
+    best_eps = get_eps_audit(len(all_labels), total_predictions, correct_predictions, p, delta)
 
     metric = {
-        'audit_eps': eps, 'threshold_t_neg': sorted_losses[-best_t_neg],
-        'threshold_t_pos': sorted_losses[(best_t_pos+1)],
-        'best_accuracy': correct_predictions / num_guesses,
-        'total_predictions': num_guesses, 'correct_predictions': correct_predictions
+        'best_eps': best_eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
+        'best_precision': best_precision, 'best_accuracy': best_accuracy,
+        'total_predictions': total_predictions, 'correct_predictions': correct_predictions
     }
+    # print(f"Best eps: {best_eps} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
+    # print(f"Best precision for t_pos: {best_precision} with t_pos: {best_t_pos}")
+    # print(f"Best accuracy: {best_accuracy} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
 
+    # # Save results to CSV file
+    # output_csv_path = "swiss_audit_over.csv"
+    # with open(output_csv_path, 'w', newline='') as csvfile:
+    #     fieldnames = ['t_pos', 't_neg', 'best_precision', 'best_accuracy', 'recall', 'total_predictions',
+    #                   'correct_predictions']
+    #     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    #
+    #     writer.writeheader()
+    #     for result in results:
+    #         writer.writerow(result)
+
+    # return total_predictions, correct_predictions, len(all_losses), metric
     return metric
 
 
