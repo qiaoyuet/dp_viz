@@ -146,6 +146,7 @@ def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
     # 5: to make sure no edge case of very little predictions gets accidently high acc
     # 1: increase gap if slow
     best_acc = 0
+    best_eps = -1
     best_num_guesses = 0
     best_correct_guesses = 0
     best_t_neg, best_t_pos = -1, -1
@@ -159,18 +160,21 @@ def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
             guesses[-t_pos:] = 1
             correct_pred = (guesses == sorted_labels).sum()
             acc = correct_pred / total_pred
+            eps = get_eps_audit(len(all_labels), best_num_guesses, best_correct_guesses, p=0.05, delta=0)
 
-            if acc > best_acc:
+            # if acc > best_acc:
+            if eps > best_eps:
+                best_eps = eps
                 best_acc = acc
                 best_num_guesses = total_pred
                 best_correct_guesses = correct_pred
                 best_t_neg = t_neg
                 best_t_pos = t_pos
 
-    eps = get_eps_audit(len(all_labels), best_num_guesses, best_correct_guesses, p=0.05, delta=0)
+    # eps = get_eps_audit(len(all_labels), best_num_guesses, best_correct_guesses, p=0.05, delta=0)
 
     metric = {
-        'audit_eps': eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
+        'audit_eps': best_eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
         'best_accuracy': best_acc,
         'total_predictions': best_num_guesses, 'correct_predictions': best_correct_guesses
     }
