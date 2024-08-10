@@ -56,7 +56,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
 
     if audit:
         mem_data, non_mem_data, train_data = insert_canaries(train_data, num_classes=train_data.num_classes,
-                                                             audit_size=audit_size, label_noise=label_noise)
+                                                             audit_size=audit_size, seed=seed,
+                                                             label_noise=label_noise)
         # mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=audit_size)
         mem_loader = DataLoader(mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
         non_mem_loader = DataLoader(non_mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
@@ -213,8 +214,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                         # print("++++++++ audit eval +++++++++: {}".format(t1 - t0))
                         mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                         non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
-                        # audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
-                        audit_metrics = find_O1_pred_quick(mem_losses, non_mem_losses)
+                        audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                        # audit_metrics = find_O1_pred_quick(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
                         # t2 = time.time()
                         # print("++++++++ audit +++++++++: {}".format(t2 - t1))
