@@ -142,7 +142,7 @@ def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
     sorted_labels = all_labels[ind]
 
     # get max pred acc
-    threshold_pos = np.arange(5, len(ind)-5+1, 1)
+    threshold_pos = np.arange(5, len(ind)-5+1, 5)
     # 5: to make sure no edge case of very little predictions gets accidently high acc
     # 1: increase gap if slow
     best_acc = 0
