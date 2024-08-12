@@ -58,7 +58,8 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
 
     if audit:
         mem_data, non_mem_data, train_data = insert_canaries(train_data, num_classes=train_data.num_classes,
-                                                             audit_size=audit_size, label_noise=label_noise)
+                                                             audit_size=audit_size, seed=seed,
+                                                             label_noise=label_noise)
         # mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=audit_size)
         mem_loader = DataLoader(mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
         non_mem_loader = DataLoader(non_mem_data, batch_size=batch_size, num_workers=num_workers, shuffle=False)
