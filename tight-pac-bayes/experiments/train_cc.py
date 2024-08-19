@@ -217,7 +217,7 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
                         mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                         non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                         audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
-                        # audit_metrics = find_O1_pred_quick(mem_losses, non_mem_losses)
+                        # audit_metrics = find_O1_pred_v2(mem_losses, non_mem_losses)
                         logging.info(audit_metrics, extra=dict(wandb=True, prefix='audit'))
                         # t2 = time.time()
                         # print("++++++++ audit +++++++++: {}".format(t2 - t1))
@@ -281,6 +281,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
         #                  extra=dict(wandb=True, prefix='train'))
             # torch.save(net.state_dict(), Path(log_dir) / exp_name / 'sgd_model.pt')
         # wandb.save('*.pt')  ## NOTE: to upload immediately.
+
+        # for computational purpose: save the last ckpt
+        # fixme
 
 
 def entrypoint(log_dir=None, exp_group='tmp', exp_name='tmp', **kwargs):
