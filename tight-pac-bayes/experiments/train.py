@@ -201,9 +201,9 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
 
                     if audit:
                         # # save interm ckpts
-                        if intrinsic_dim > 0:
-                            torch.save(net.state_dict(),
-                                       Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
+                        # if intrinsic_dim > 0:
+                        #     torch.save(net.state_dict(),
+                        #                Path(log_dir) / exp_name / 'interm_model_s{}.pt'.format(step_counter))
 
                         # t0 = time.time()
                         _, cur_mem_losses = eval_model(net, mem_loader, criterion, device_id=device_id,
@@ -264,15 +264,15 @@ def main(seed=137, device_id=0, distributed=False, data_dir=None, log_dir=None,
             optim_scheduler.step()
 
         # epoch wise logging
-        train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
-        # test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
-        logging.info(train_metrics, extra=dict(wandb=True, prefix='per_epoch_metrics'))
-        # logging.info(test_metrics, extra=dict(wandb=True, prefix='per_epoch_metrics'))
-        # if test_metrics['acc'] > best_test_acc_so_far:
-        #     best_acc_so_far = test_metrics['acc']
-        #     logging.info({'best_test_epoch': e, 'best_test_acc': best_acc_so_far},
-        #                  extra=dict(wandb=True, prefix='test'))
-        #     # torch.save(net.state_dict(), Path(log_dir) / exp_name / 'best_sgd_model.pt')
+        # train_metrics, _ = eval_model(net, train_loader, criterion, device_id=device_id, distributed=distributed)
+        test_metrics, _ = eval_model(net, test_loader, criterion, device_id=device_id, distributed=distributed)
+        # logging.info(train_metrics, extra=dict(wandb=True, prefix='per_epoch_metrics'))
+        logging.info(test_metrics, extra=dict(wandb=True, prefix='per_epoch_metrics'))
+        if test_metrics['acc'] > best_test_acc_so_far:
+            best_acc_so_far = test_metrics['acc']
+            logging.info({'best_test_epoch': e, 'best_test_acc': best_acc_so_far},
+                         extra=dict(wandb=True, prefix='test'))
+            torch.save(net.state_dict(), Path(log_dir) / exp_name / 'best_sgd_model.pt')
         # if train_metrics['acc'] > best_train_acc_so_far:
         #     best_acc_so_far = train_metrics['acc']
         #     logging.info({'best_train_epoch': e, 'best_train_acc': best_acc_so_far},
