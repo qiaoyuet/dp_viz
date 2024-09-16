@@ -1,0 +1,115 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="DuplicatedCode" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="93">
+            <item index="0" class="java.lang.String" itemvalue="tqdm" />
+            <item index="1" class="java.lang.String" itemvalue="pandas" />
+            <item index="2" class="java.lang.String" itemvalue="jax" />
+            <item index="3" class="java.lang.String" itemvalue="seaborn" />
+            <item index="4" class="java.lang.String" itemvalue="tensorboard" />
+            <item index="5" class="java.lang.String" itemvalue="matplotlib" />
+            <item index="6" class="java.lang.String" itemvalue="dm-haiku" />
+            <item index="7" class="java.lang.String" itemvalue="optax" />
+            <item index="8" class="java.lang.String" itemvalue="torch" />
+            <item index="9" class="java.lang.String" itemvalue="requests" />
+            <item index="10" class="java.lang.String" itemvalue="torchvision" />
+            <item index="11" class="java.lang.String" itemvalue="protobuf" />
+            <item index="12" class="java.lang.String" itemvalue="tensorflow-estimator" />
+            <item index="13" class="java.lang.String" itemvalue="googleapis-common-protos" />
+            <item index="14" class="java.lang.String" itemvalue="blessings" />
+            <item index="15" class="java.lang.String" itemvalue="PyYAML" />
+            <item index="16" class="java.lang.String" itemvalue="promise" />
+            <item index="17" class="java.lang.String" itemvalue="gitdb" />
+            <item index="18" class="java.lang.String" itemvalue="jmp" />
+            <item index="19" class="java.lang.String" itemvalue="redis" />
+            <item index="20" class="java.lang.String" itemvalue="aiohttp-cors" />
+            <item index="21" class="java.lang.String" itemvalue="filelock" />
+            <item index="22" class="java.lang.String" itemvalue="sentry-sdk" />
+            <item index="23" class="java.lang.String" itemvalue="shortuuid" />
+            <item index="24" class="java.lang.String" itemvalue="torchaudio" />
+            <item index="25" class="java.lang.String" itemvalue="jsonschema" />
+            <item index="26" class="java.lang.String" itemvalue="google-api-core" />
+            <item index="27" class="java.lang.String" itemvalue="tensorflow-gpu" />
+            <item index="28" class="java.lang.String" itemvalue="GitPython" />
+            <item index="29" class="java.lang.String" itemvalue="pydantic" />
+            <item index="30" class="java.lang.String" itemvalue="py-spy" />
+            <item index="31" class="java.lang.String" itemvalue="ray" />
+            <item index="32" class="java.lang.String" itemvalue="keras-nightly" />
+            <item index="33" class="java.lang.String" itemvalue="psutil" />
+            <item index="34" class="java.lang.String" itemvalue="hiredis" />
+            <item index="35" class="java.lang.String" itemvalue="aioredis" />
+            <item index="36" class="java.lang.String" itemvalue="jaxlib" />
+            <item index="37" class="java.lang.String" itemvalue="configparser" />
+            <item index="38" class="java.lang.String" itemvalue="opencensus-context" />
+            <item index="39" class="java.lang.String" itemvalue="Keras" />
+            <item index="40" class="java.lang.String" itemvalue="msgpack" />
+            <item index="41" class="java.lang.String" itemvalue="mkl-service" />
+            <item index="42" class="java.lang.String" itemvalue="brotlipy" />
+            <item index="43" class="java.lang.String" itemvalue="async-timeout" />
+            <item index="44" class="java.lang.String" itemvalue="smmap" />
+            <item index="45" class="java.lang.String" itemvalue="pyrsistent" />
+            <item index="46" class="java.lang.String" itemvalue="mkl-fft" />
+            <item index="47" class="java.lang.String" itemvalue="tensorboard-plugin-wit" />
+            <item index="48" class="java.lang.String" itemvalue="blinker" />
+            <item index="49" class="java.lang.String" itemvalue="opacus" />
+            <item index="50" class="java.lang.String" itemvalue="subprocess32" />
+            <item index="51" class="java.lang.String" itemvalue="google-auth-oauthlib" />
+            <item index="52" class="java.lang.String" itemvalue="python-utils" />
+            <item index="53" class="java.lang.String" itemvalue="gpustat" />
+            <item index="54" class="java.lang.String" itemvalue="packaging" />
+            <item index="55" class="java.lang.String" itemvalue="Keras-Applications" />
+            <item index="56" class="java.lang.String" itemvalue="docker-pycreds" />
+            <item index="57" class="java.lang.String" itemvalue="opencensus" />
+            <item index="58" class="java.lang.String" itemvalue="pathtools" />
+            <item index="59" class="java.lang.String" itemvalue="chex" />
+            <item index="60" class="java.lang.String" itemvalue="colorama" />
+            <item index="61" class="java.lang.String" itemvalue="future" />
+            <item index="62" class="java.lang.String" itemvalue="tensorboardX" />
+            <item index="63" class="java.lang.String" itemvalue="olefile" />
+            <item index="64" class="java.lang.String" itemvalue="nvidia-ml-py3" />
+            <item index="65" class="java.lang.String" itemvalue="google-pasta" />
+            <item index="66" class="java.lang.String" itemvalue="h5py" />
+            <item index="67" class="java.lang.String" itemvalue="wrapt" />
+            <item index="68" class="java.lang.String" itemvalue="cycler" />
+            <item index="69" class="java.lang.String" itemvalue="gast" />
+            <item index="70" class="java.lang.String" itemvalue="prometheus-client" />
+            <item index="71" class="java.lang.String" itemvalue="Keras-Preprocessing" />
+            <item index="72" class="java.lang.String" itemvalue="termcolor" />
+            <item index="73" class="java.lang.String" itemvalue="flatbuffers" />
+            <item index="74" class="java.lang.String" itemvalue="toolz" />
+            <item index="75" class="java.lang.String" itemvalue="certifi" />
+            <item index="76" class="java.lang.String" itemvalue="astunparse" />
+            <item index="77" class="java.lang.String" itemvalue="cached-property" />
+            <item index="78" class="java.lang.String" itemvalue="pyasn1-modules" />
+            <item index="79" class="java.lang.String" itemvalue="requests-oauthlib" />
+            <item index="80" class="java.lang.String" itemvalue="torchcsprng" />
+            <item index="81" class="java.lang.String" itemvalue="tensorboard-data-server" />
+            <item index="82" class="java.lang.String" itemvalue="pyasn1" />
+            <item index="83" class="java.lang.String" itemvalue="opt-einsum" />
+            <item index="84" class="java.lang.String" itemvalue="tabulate" />
+            <item index="85" class="java.lang.String" itemvalue="dm-tree" />
+            <item index="86" class="java.lang.String" itemvalue="tensorflow" />
+            <item index="87" class="java.lang.String" itemvalue="tensorflow_datasets" />
+            <item index="88" class="java.lang.String" itemvalue="tensorflow_privacy" />
+            <item index="89" class="java.lang.String" itemvalue="autodp" />
+            <item index="90" class="java.lang.String" itemvalue="optuna" />
+            <item index="91" class="java.lang.String" itemvalue="wandb" />
+            <item index="92" class="java.lang.String" itemvalue="numpy" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8Inspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="E211" />
+          <option value="E501" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
