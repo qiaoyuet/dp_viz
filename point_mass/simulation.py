@@ -1,6 +1,5 @@
 import numpy as np
 import random
-import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
@@ -36,8 +35,7 @@ parser.add_argument('--target_eps', type=float, default=None)
 parser.add_argument("--out_path", type=str, default="/home/qiaoyuet/project/dp_viz/point_mass/outputs")
 parser.add_argument("--save", default=False, action='store_true')
 parser.add_argument("--plot", default=False, action='store_true')
-parser.add_argument("--load_path_non_priv", type=str, default=None)
-parser.add_argument("--load_path_priv", type=str, default=None)
+parser.add_argument("--load_path", type=str, default=None)
 args = parser.parse_args()
 
 
@@ -235,8 +233,26 @@ def save_model(args, model, step_num):
     torch.save(model.state_dict(), os.path.join(save_path, 's_{}.pt'.format(step_num)))
 
 
-def load_model(args, load_path):
+def load_model(load_path):
     model = MLP(init_dim=2, final_dim=2)
+    model.load_state_dict(torch.load(load_path, weights_only=True))
+    model.eval()
+    return model
+
+
+def load_model_priv(load_path, x_train, y_train):
+    model = MLP(init_dim=2, final_dim=2)
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr)
+    train_dataset = TensorDataset(x_train, y_train)
+    train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
+    privacy_engine = PrivacyEngine(accountant='prv')
+    model, _, _ = privacy_engine.make_private(
+        module=model,
+        optimizer=optimizer,
+        data_loader=train_loader,
+        max_grad_norm=args.dp_l2_norm_clip,
+        noise_multiplier=args.dp_noise_multiplier
+    )
     model.load_state_dict(torch.load(load_path, weights_only=True))
     model.eval()
     return model
@@ -250,18 +266,17 @@ def infer(xinfer, model):
     return yinfer
 
 
-def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_name):
+def plot_decision_boundary(args, model, x_train, y_train, x_valid, y_valid, save_name, device='cuda'):
+    model = model.to(device)
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
 
-    ## non-priv model
-    xlin1 = np.linspace(round(torch_to_np(x_dat[:, 0]).min()) - 2, round(torch_to_np(x_dat[:, 0]).max()) + 2,
-                        500)
-    xlin2 = np.linspace(round(torch_to_np(x_dat[:, 1]).min()) - 2, round(torch_to_np(x_dat[:, 1]).max()) + 2,
-                        500)
+    xlin1 = np.linspace(round(torch_to_np(x_train[:, 0]).min()) - 2, round(torch_to_np(x_train[:, 0]).max()) + 2, 500)
+    xlin2 = np.linspace(round(torch_to_np(x_train[:, 1]).min()) - 2, round(torch_to_np(x_train[:, 1]).max()) + 2, 500)
     xx1, xx2 = np.meshgrid(xlin1, xlin2)
     xinfer = np.column_stack([xx1.ravel(), xx2.ravel()])
     xinfer = np_to_torch(xinfer)
-    yinfer = infer(xinfer, model_non_priv)
+    yinfer = infer(xinfer, model)
     yinfer = torch_to_np(yinfer)
     yy = np.reshape(yinfer, xx1.shape)
 
@@ -270,8 +285,9 @@ def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_
 
     # plot class 0
     # correctly/wrongly predicted is plotted as point/cross
-    xinfer = x_dat[y_dat.ravel() == 0]
-    yinfer = infer(xinfer, model_non_priv)
+    xinfer = x_train[y_train.ravel() == 0]
+    xinfer = xinfer.to(device)
+    yinfer = infer(xinfer, model)
     xinfer = torch_to_np(xinfer)
     yinfer = torch_to_np(yinfer)
     ax1.plot(xinfer[yinfer.ravel() == 0, 0], xinfer[yinfer.ravel() == 0, 1], '.',
@@ -281,8 +297,9 @@ def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_
 
     # plot class 1
     # correctly/wrongly predicted is plotted as point/cross
-    xinfer = x_dat[y_dat.ravel() == 1]
-    yinfer = infer(xinfer, model_non_priv)
+    xinfer = x_train[y_train.ravel() == 1]
+    xinfer = xinfer.to(device)
+    yinfer = infer(xinfer, model)
     xinfer = torch_to_np(xinfer)
     yinfer = torch_to_np(yinfer)
     ax1.plot(xinfer[yinfer.ravel() == 1, 0], xinfer[yinfer.ravel() == 1, 1], '.',
@@ -290,18 +307,16 @@ def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_
     ax1.plot(xinfer[yinfer.ravel() == 0, 0], xinfer[yinfer.ravel() == 0, 1], 'x',
              color='red', markersize=8, label='class 1 error')
 
-    ax1.set_title('non_priv_train')
+    ax1.set_title('train')
     # ax1.legend(loc='lower left', framealpha=.5, fontsize=10)
 
     ## priv model
-    xlin1 = np.linspace(round(torch_to_np(x_dat[:, 0]).min()) - 2, round(torch_to_np(x_dat[:, 0]).max()) + 2,
-                        500)
-    xlin2 = np.linspace(round(torch_to_np(x_dat[:, 1]).min()) - 2, round(torch_to_np(x_dat[:, 1]).max()) + 2,
-                        500)
+    xlin1 = np.linspace(round(torch_to_np(x_valid[:, 0]).min()) - 2, round(torch_to_np(x_valid[:, 0]).max()) + 2, 500)
+    xlin2 = np.linspace(round(torch_to_np(x_valid[:, 1]).min()) - 2, round(torch_to_np(x_valid[:, 1]).max()) + 2, 500)
     xx1, xx2 = np.meshgrid(xlin1, xlin2)
     xinfer = np.column_stack([xx1.ravel(), xx2.ravel()])
     xinfer = np_to_torch(xinfer)
-    yinfer = infer(xinfer, model_priv)
+    yinfer = infer(xinfer, model)
     yinfer = torch_to_np(yinfer)
     yy = np.reshape(yinfer, xx1.shape)
 
@@ -310,8 +325,9 @@ def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_
 
     # plot class 0
     # correctly/wrongly predicted is plotted as point/cross
-    xinfer = x_dat[y_dat.ravel() == 0]
-    yinfer = infer(xinfer, model_priv)
+    xinfer = x_valid[y_valid.ravel() == 0]
+    xinfer = xinfer.to(device)
+    yinfer = infer(xinfer, model)
     xinfer = torch_to_np(xinfer)
     yinfer = torch_to_np(yinfer)
     ax2.plot(xinfer[yinfer.ravel() == 0, 0], xinfer[yinfer.ravel() == 0, 1], '.',
@@ -321,8 +337,9 @@ def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_
 
     # plot class 1
     # correctly/wrongly predicted is plotted as point/cross
-    xinfer = x_dat[y_dat.ravel() == 1]
-    yinfer = infer(xinfer, model_priv)
+    xinfer = x_valid[y_valid.ravel() == 1]
+    xinfer = xinfer.to(device)
+    yinfer = infer(xinfer, model)
     xinfer = torch_to_np(xinfer)
     yinfer = torch_to_np(yinfer)
     ax2.plot(xinfer[yinfer.ravel() == 1, 0], xinfer[yinfer.ravel() == 1, 1], '.',
@@ -330,11 +347,14 @@ def plot_decision_boundary(args, model_non_priv, model_priv, x_dat, y_dat, save_
     ax2.plot(xinfer[yinfer.ravel() == 0, 0], xinfer[yinfer.ravel() == 0, 1], 'x',
              color='red', markersize=8, label='class 1 error')
 
-    ax2.set_title('priv_train')
+    ax2.set_title('test')
     # ax2.legend(loc='lower left', framealpha=.5, fontsize=10)
 
     # plt.show()
-    plt.savefig(args.out_path, os.path.join(args.out_path, '{}_{}.png'.format(args.exp_name, save_name)))
+    save_path = os.path.join(args.load_path, 'img')
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+    fig.savefig(os.path.join(save_path, '{}.png'.format(save_name)))
     plt.close()
 
 
@@ -343,6 +363,8 @@ def main(args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     x_train, x_valid, y_train, y_valid = simulate_data(args)
 
     if not args.plot:
@@ -350,18 +372,20 @@ def main(args):
         if not args.debug:
             wandb.init(project=args.exp_proj, config=args, group=args.exp_group, name=args.exp_name)
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
         if args.non_priv:
             train_non_priv(args, x_train, x_valid, y_train, y_valid, device)
         else:
             train_priv(args, x_train, x_valid, y_train, y_valid, device)
     else:
         # plot
-        model_non_priv = load_model(args, args.load_path_non_priv)
-        model_priv = load_model(args, args.load_path_priv)
-        plot_decision_boundary(args, model_non_priv, model_priv, x_train, y_train, 'train')
-        plot_decision_boundary(args, model_non_priv, model_priv, x_valid, y_valid, 'test')
+        ckpts = os.listdir(args.load_path)
+        for ckpt in ckpts:
+            if ckpt.endswith('.pt'):
+                if args.non_priv:
+                    tmp_model = load_model(os.path.join(args.load_path, ckpt))
+                else:
+                    tmp_model = load_model_priv(os.path.join(args.load_path, ckpt), x_train, y_train)
+                plot_decision_boundary(args, tmp_model, x_train, y_train, x_valid, y_valid, str(ckpt).split('.')[0])
 
 
 if __name__ == '__main__':
