@@ -36,6 +36,9 @@ parser.add_argument("--out_path", type=str, default="/home/qiaoyuet/project/dp_v
 parser.add_argument("--save", default=False, action='store_true')
 parser.add_argument("--plot", default=False, action='store_true')
 parser.add_argument("--load_path", type=str, default=None)
+parser.add_argument('--num_hidden_layers', default=3, type=int)
+parser.add_argument('--num_hidden_neurons', default=3, type=int)
+parser.add_argument("--remove_minority", default=False, action='store_true')
 args = parser.parse_args()
 
 
@@ -56,7 +59,27 @@ class MLP(nn.Module):
             self.relu(self.linear2(self.relu(self.linear1(x)))))))))))
 
 
-def simulate_data(args):
+class MLP2(nn.Module):
+    def __init__(self, init_dim, final_dim, num_hidden_layers, num_hidden_neurons):
+        super().__init__()
+        self.initial_layer = nn.Linear(init_dim, num_hidden_neurons)
+        self.inner_layer = nn.Linear(num_hidden_neurons, num_hidden_neurons)
+        self.final_layer = nn.Linear(num_hidden_neurons, final_dim)
+        self.num_hidden_layers = num_hidden_layers
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.initial_layer(x)
+        x = self.relu(x)
+        for _ in range(self.num_hidden_layers):
+            x = self.inner_layer(x)
+            x = self.relu(x)
+        x = self.final_layer(x)
+        return x
+
+
+def simulate_data_1(args):
+    # center mass and a separate minority group
     # multivariate gaussian
     f_0 = np.random.multivariate_normal(  # majority of class 0
         mean=[5, 5], cov=[[3, 0], [0, 3]], size=1000
@@ -71,8 +94,74 @@ def simulate_data(args):
     f_1_1 = np.random.multivariate_normal(  # minority of class 0
         mean=[23, 0], cov=[[1, 0], [0, 1]], size=50
     )
-    x1_0, x2_0 = np.concatenate([f_0[:, 0], f_1_1[:, 0]]), np.concatenate([f_0[:, 1], f_1_1[:, 1]])  # class 0
-    x1_1, x2_1 = np.concatenate([f_1[:, 0], f_0_1[:, 0]]), np.concatenate([f_1[:, 1], f_0_1[:, 1]])  # class 1
+
+    if not args.remove_minority:
+        x1_0, x2_0 = np.concatenate([f_0[:, 0], f_1_1[:, 0]]), np.concatenate([f_0[:, 1], f_1_1[:, 1]])  # class 0
+        x1_1, x2_1 = np.concatenate([f_1[:, 0], f_0_1[:, 0]]), np.concatenate([f_1[:, 1], f_0_1[:, 1]])  # class 1
+    else:
+        # ablation: without the minority groups
+        x1_0, x2_0 = np.concatenate([f_0[:, 0]]), np.concatenate([f_0[:, 1]])  # class 0
+        x1_1, x2_1 = np.concatenate([f_1[:, 0]]), np.concatenate([f_1[:, 1]])  # class 1
+
+    all_x1 = np.concatenate([x1_0, x1_1])
+    all_x2 = np.concatenate([x2_0, x2_1])
+    all_y = np.concatenate([np.zeros(len(x1_0)), np.ones(len(x1_1))]).astype(int)
+
+    dat = pd.DataFrame({'x1': all_x1, 'x2': all_x2, 'y': all_y})
+
+    x_data = torch.tensor(dat[['x1', 'x2']].values, dtype=torch.float32)
+    y_data = torch.tensor(dat[['y']].values, dtype=torch.long)
+
+    x_train, x_valid, y_train, y_valid = train_test_split(x_data, y_data, random_state=args.seed,
+                                                          test_size=args.valid_prop, shuffle=True)
+    return x_train, x_valid, y_train, y_valid
+
+
+def simulate_data_2(args):
+    # center mass and many separate pairs
+    n_pairs = 20
+
+    f_0 = np.random.multivariate_normal(  # majority of class 0
+        mean=[5, 5], cov=[[7, 0], [0, 7]], size=1000
+    )
+    f_1 = np.random.multivariate_normal(  # majority of class 1
+        mean=[20, 5], cov=[[7, 0], [0, 7]], size=1000
+    )
+
+    tmp_list = []
+    tmp_label = []
+    for _ in range(n_pairs):
+        tmp_list.append(np.random.multivariate_normal(
+            mean=[np.random.uniform(4, 21), np.random.uniform(-15, -4)], cov=[[0.02, 0], [0, 0.02]], size=2
+        ))
+        tmp_label.extend([np.random.choice([0, 1])] * 2)
+        #
+        tmp_list.append(np.random.multivariate_normal(
+            mean=[np.random.uniform(4, 21), np.random.uniform(-15, -4)], cov=[[0.02, 0], [0, 0.02]], size=2
+        ))
+        tmp_label.extend([np.random.choice([0, 1])] * 2)
+        #
+        tmp_list.append(np.random.multivariate_normal(
+            mean=[np.random.uniform(4, 21), np.random.uniform(13, 25)], cov=[[0.02, 0], [0, 0.02]], size=2
+        ))
+        tmp_label.extend([np.random.choice([0, 1])] * 2)
+        #
+        tmp_list.append(np.random.multivariate_normal(
+            mean=[np.random.uniform(4, 21), np.random.uniform(13, 25)], cov=[[0.02, 0], [0, 0.02]], size=2
+        ))
+        tmp_label.extend([np.random.choice([0, 1])] * 2)
+    f_0_1 = np.concatenate(tmp_list, axis=0)
+    tmp_label = np.array(tmp_label)
+
+    if not args.remove_minority:
+        x1_0, x2_0 = np.concatenate([f_0[:, 0], f_0_1[np.where(tmp_label == 0)[0], 0]]), np.concatenate(
+            [f_0[:, 1], f_0_1[np.where(tmp_label == 0)[0], 1]])  # class 0
+        x1_1, x2_1 = np.concatenate([f_1[:, 0], f_0_1[np.where(tmp_label == 1)[0], 0]]), np.concatenate(
+            [f_1[:, 1], f_0_1[np.where(tmp_label == 1)[0], 1]])  # class 1
+    else:
+        # ablation: without the minority groups
+        x1_0, x2_0 = np.concatenate([f_0[:, 0]]), np.concatenate([f_0[:, 1]])  # class 0
+        x1_1, x2_1 = np.concatenate([f_1[:, 0]]), np.concatenate([f_1[:, 1]])  # class 1
 
     all_x1 = np.concatenate([x1_0, x1_1])
     all_x2 = np.concatenate([x2_0, x2_1])
@@ -101,7 +190,9 @@ def accuracy(preds, labels):
 
 
 def train_non_priv(args, x_train, x_valid, y_train, y_valid, device):
-    model = MLP(init_dim=2, final_dim=2).to(device)
+    # model = MLP(init_dim=2, final_dim=2).to(device)
+    model = MLP2(init_dim=2, final_dim=2,
+                 num_hidden_layers=args.num_hidden_layers, num_hidden_neurons=args.num_hidden_neurons).to(device)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr)
 
@@ -149,7 +240,9 @@ def train_priv(args, x_train, x_valid, y_train, y_valid, device):
     valid_dataset = TensorDataset(x_valid, y_valid)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset))
 
-    model = MLP(init_dim=2, final_dim=2).to(device)
+    # model = MLP(init_dim=2, final_dim=2).to(device)
+    model = MLP2(init_dim=2, final_dim=2,
+                 num_hidden_layers=args.num_hidden_layers, num_hidden_neurons=args.num_hidden_neurons).to(device)
     model = ModuleValidator.fix(model)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr)
@@ -233,15 +326,19 @@ def save_model(args, model, step_num):
     torch.save(model.state_dict(), os.path.join(save_path, 's_{}.pt'.format(step_num)))
 
 
-def load_model(load_path):
-    model = MLP(init_dim=2, final_dim=2)
+def load_model(load_path, device='cuda'):
+    # model = MLP(init_dim=2, final_dim=2)
+    model = MLP2(init_dim=2, final_dim=2,
+                 num_hidden_layers=args.num_hidden_layers, num_hidden_neurons=args.num_hidden_neurons).to(device)
     model.load_state_dict(torch.load(load_path, weights_only=True))
     model.eval()
     return model
 
 
-def load_model_priv(load_path, x_train, y_train):
-    model = MLP(init_dim=2, final_dim=2)
+def load_model_priv(load_path, x_train, y_train, device='cuda'):
+    # model = MLP(init_dim=2, final_dim=2)
+    model = MLP2(init_dim=2, final_dim=2,
+                 num_hidden_layers=args.num_hidden_layers, num_hidden_neurons=args.num_hidden_neurons).to(device)
     optimizer = torch.optim.SGD(params=model.parameters(), lr=args.lr)
     train_dataset = TensorDataset(x_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
@@ -263,6 +360,7 @@ def infer(xinfer, model):
     with torch.no_grad():
         ylogits = model(xinfer)
         _, yinfer = torch.max(ylogits, 1)
+        # yinfer = torch.nn.functional.softmax(ylogits, dim=1)
     return yinfer
 
 
@@ -281,7 +379,10 @@ def plot_decision_boundary(args, model, x_train, y_train, x_valid, y_valid, save
     yy = np.reshape(yinfer, xx1.shape)
 
     # make contour of decision boundary
-    ax1.contourf(xx1, xx2, yy, alpha=.5, cmap='rainbow')
+    ax1.contourf(xx1, xx2, yy, alpha=.5,
+                 # colors=['blue', 'red']
+                 cmap='bwr'
+                 )
 
     # plot class 0
     # correctly/wrongly predicted is plotted as point/cross
@@ -321,7 +422,10 @@ def plot_decision_boundary(args, model, x_train, y_train, x_valid, y_valid, save
     yy = np.reshape(yinfer, xx1.shape)
 
     # make contour of decision boundary
-    ax2.contourf(xx1, xx2, yy, alpha=.5, cmap='rainbow')
+    ax2.contourf(xx1, xx2, yy, alpha=.5,
+                 # colors=['blue', 'red']
+                 cmap='bwr'
+                 )
 
     # plot class 0
     # correctly/wrongly predicted is plotted as point/cross
@@ -365,7 +469,8 @@ def main(args):
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    x_train, x_valid, y_train, y_valid = simulate_data(args)
+    # x_train, x_valid, y_train, y_valid = simulate_data_1(args)
+    x_train, x_valid, y_train, y_valid = simulate_data_2(args)
 
     if not args.plot:
         # train
