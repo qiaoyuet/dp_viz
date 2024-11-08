@@ -394,9 +394,9 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
         'best_precision': best_precision, 'best_accuracy': best_accuracy,
         'total_predictions': total_predictions, 'correct_predictions': correct_predictions
     }
-    print(f"Best eps: {best_eps} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
-    print(f"Best precision for t_pos: {best_precision} with t_pos: {best_t_pos}")
-    print(f"Best accuracy: {best_accuracy} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
+    # print(f"Best eps: {best_eps} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
+    # print(f"Best precision for t_pos: {best_precision} with t_pos: {best_t_pos}")
+    # print(f"Best accuracy: {best_accuracy} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
 
     # # Save results to CSV file
     # output_csv_path = "swiss_audit_over.csv"

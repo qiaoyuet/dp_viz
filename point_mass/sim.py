@@ -1,19 +1,24 @@
 import argparse
 import numpy as np
 import torch
-import numpy as np
 import random
 from collections import Counter
+import matplotlib
+# matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import torch
 import scipy.stats as stats
 import math
 import wandb
 import os
+import opacus
+from opacus.validators import ModuleValidator
+from opacus import PrivacyEngine
+from opacus.utils.batch_memory_manager import BatchMemoryManager
+from torch.utils.data import TensorDataset, DataLoader
 
-from utils import np_to_torch, torch_to_np
 from auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_v2, insert_canaries
-
+from utils import torch_to_np, np_to_torch, save_plot, save_data_instance
 
 parser = argparse.ArgumentParser(description='MemoSim')
 parser.add_argument('--seed', default=1024, type=int)
@@ -24,22 +29,33 @@ parser.add_argument('--n_epoch', default=1000, type=int)
 parser.add_argument('--eval_every', default=1, type=int)
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--audit', action='store_true')
+parser.add_argument('--no_plot', action='store_true')
 parser.add_argument('--exp_group', default='tmp', type=str)
 parser.add_argument('--exp_name', default='tmp', type=str)
 parser.add_argument('--save_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim', type=str)
+parser.add_argument('--l2_reg', default=0.0, type=float)
+parser.add_argument('--target_epsilon', default=-1., type=float)
+parser.add_argument('--delta', default=1e-5, type=float)
+parser.add_argument('--dp_C', default=1., type=float)
+parser.add_argument('--dp_noise', default=-1., type=float)
+parser.add_argument('--non_priv', action='store_true')
 args = parser.parse_args()
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class Net(torch.nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.hidden1 = torch.nn.Linear(1, 64)
-        self.hidden2 = torch.nn.Linear(64, 64)
+        self.hidden2 = torch.nn.Linear(64, 128)
+        self.hidden3 = torch.nn.Linear(128, 64)
         self.output = torch.nn.Linear(64, 1)
 
     def forward(self, x):
         x = torch.relu(self.hidden1(x))
         x = torch.relu(self.hidden2(x))
+        x = torch.relu(self.hidden3(x))
         x = self.output(x)
         return x
 
@@ -76,47 +92,26 @@ def sim_data(args):
     return train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y
 
 
-def save_plot(train_x, train_y, net, epoch):
-    # plot true function
-    f = lambda x: np.sin(3 * x)
-    x_plot = np.linspace(0, 2, 100)
-    actual_y = [f(p).item() for p in x_plot]
-    plt.plot(x_plot, actual_y, 'g', label='Actual Function')
-
-    # plot train data
-    plt.scatter(train_x, train_y)
-
-    # plot est function
-    x_plot = np.linspace(0, 2, 100)
-    predicted_y = net(np_to_torch(x_plot).unsqueeze(1)).squeeze()
-    plt.plot(x_plot, predicted_y.detach().numpy(), 'b', label='Predicted Function')
-    plt.legend()
-    # plt.show()
-    save_path = os.path.join(args.save_path, 'img')
-    if not os.path.isdir(save_path):
-        os.mkdir(save_path)
-    plt.savefig(os.path.join(save_path, '{}-e{}.png'.format(args.exp_name, epoch)))
-    plt.close()
-
-
+@torch.no_grad()
 def eval_model(net, test_x, test_y, criterion, audit=False):
     net.eval()
     if audit:
         criterion = torch.nn.MSELoss(reduction='none')  # get per-sample loss for audit
-    with torch.no_grad():
-        t_x = np_to_torch(test_x)
-        t_y = np_to_torch(test_y)
-        y_pred = net(t_x.unsqueeze(1))
-        t_loss = criterion(y_pred.squeeze(), t_y)
+    t_x = np_to_torch(test_x).to(device)
+    t_y = np_to_torch(test_y).to(device)
+    y_pred = net(t_x.unsqueeze(1))
+    t_loss = criterion(y_pred.squeeze(), t_y)
+    t_loss = torch_to_np(t_loss)
+    y_pred = torch_to_np(y_pred)
     return y_pred, t_loss
 
 
-def train(args, train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y):
-    net = Net()
+def train(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y):
+    net = Net().to(device)
     if not args.debug:
         wandb.watch(net)
     criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr)
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=args.l2_reg)
 
     x = np_to_torch(train_x)
     y = np_to_torch(train_y)
@@ -139,7 +134,7 @@ def train(args, train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_m
             # train_stats
             train_metric = {
                 'epoch': epoch,
-                'train_loss': loss.detach().numpy()
+                'train_loss': torch_to_np(loss)
             }
             if not args.debug:
                 wandb.log(train_metric)
@@ -147,14 +142,14 @@ def train(args, train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_m
             # test_stats
             y_pred, t_loss = eval_model(net, test_x, test_y, criterion)
             test_metric = {
-                'test_loss': t_loss.detach().numpy()
+                'test_loss': t_loss
             }
             if not args.debug:
                 wandb.log(test_metric)
 
             # save_plot
-            if not args.debug:
-                save_plot(train_x, train_y, net, epoch)
+            if not args.debug and epoch % 500 == 0 and not args.no_plot:
+                save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
 
             # audit_stats
             if args.audit:
@@ -167,15 +162,113 @@ def train(args, train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_m
                     wandb.log(audit_metrics)
 
 
-def main(args):
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y = sim_data(args)
-    train(args, train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y)
+def train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y):
+    net = Net().to(device)
+    net = ModuleValidator.fix(net)
+    if not args.debug:
+        wandb.watch(net)
+    criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=args.l2_reg)
+
+    x = np_to_torch(train_x)
+    y = np_to_torch(train_y)
+    train_dataset = TensorDataset(x, y)
+    train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
+
+    privacy_engine = PrivacyEngine(accountant='prv')
+
+    assert args.dp_noise > -1 or args.target_epsilon > -1
+    if args.dp_noise > -1:
+        net, optimizer, train_loader = privacy_engine.make_private(
+            module=net,
+            optimizer=optimizer,
+            data_loader=train_loader,
+            max_grad_norm=args.dp_C,
+            noise_multiplier=args.dp_noise
+        )
+        if not args.debug: wandb.log({'dp_noise_multiplier': args.dp_noise_multiplier})
+    else:
+        net, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
+            module=net,
+            optimizer=optimizer,
+            data_loader=train_loader,
+            epochs=args.n_epoch,
+            target_epsilon=args.target_epsilon,
+            target_delta=args.delta,
+            max_grad_norm=args.dp_C,
+        )
+        if not args.debug: wandb.log({'dp_noise_multiplier': optimizer.noise_multiplier})
+
+    if args.audit:
+        # compute initial loss value as auditing score baseline (optional)
+        # make sure shuffle is False in data loaders
+        _, init_mem_losses = eval_model(net, mem_x, mem_y, criterion, audit=True)
+        _, init_non_mem_losses = eval_model(net, non_mem_x, non_mem_y, criterion, audit=True)
+
+    for epoch in range(args.n_epoch):
+        net.train()
+        optimizer.zero_grad()
+        outputs = net(x.unsqueeze(1))
+        loss = criterion(outputs.squeeze(), y)
+        loss.backward()
+        optimizer.step()
+
+        if epoch % args.eval_every == 0:
+            # train_stats
+            train_metric = {
+                'epoch': epoch,
+                'train_loss': torch_to_np(loss)
+            }
+            if not args.debug:
+                wandb.log(train_metric)
+
+            # test_stats
+            y_pred, t_loss = eval_model(net, test_x, test_y, criterion)
+            test_metric = {
+                'test_loss': t_loss
+            }
+            if not args.debug:
+                wandb.log(test_metric)
+
+            # save_plot
+            if not args.debug and epoch % 500 == 0 and not args.no_plot:
+                save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
+
+            # audit_stats
+            if args.audit:
+                _, cur_mem_losses = eval_model(net, mem_x, mem_y, criterion, audit=True)
+                _, cur_non_mem_losses = eval_model(net, non_mem_x, non_mem_y, criterion, audit=True)
+                mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
+                non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
+                audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
+                if not args.debug:
+                    wandb.log(audit_metrics)
 
 
-if __name__ == '__main__':
+def main():
     if not args.debug:
         wandb.login()
         run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
-    main(args)
+
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y = sim_data(args)
+    if not args.debug:
+        data_dict = {
+            'train_x': train_x, 'train_y': train_y, 'test_x': test_x, 'test_y': test_y
+        }
+        save_path = os.path.join(args.save_path, args.exp_name, 'data_instance.pkl')
+        save_data_instance(data_dict, save_path)
+
+    if args.non_priv:
+        train(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y)
+    else:
+        train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y)
+
+    # fixme: save model ckpt
+
+
+if __name__ == '__main__':
+    main()
