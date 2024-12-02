@@ -18,7 +18,7 @@ from opacus.utils.batch_memory_manager import BatchMemoryManager
 from torch.utils.data import TensorDataset, DataLoader
 
 from auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_v2, insert_canaries
-from utils import torch_to_np, np_to_torch, save_plot, save_data_instance
+from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model
 
 parser = argparse.ArgumentParser(description='MemoSim')
 parser.add_argument('--seed', default=1024, type=int)
@@ -44,23 +44,10 @@ args = parser.parse_args()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-class Net(torch.nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.hidden1 = torch.nn.Linear(1, 64)
-        self.hidden2 = torch.nn.Linear(64, 128)
-        self.hidden3 = torch.nn.Linear(128, 64)
-        self.output = torch.nn.Linear(64, 1)
-
-    def forward(self, x):
-        x = torch.relu(self.hidden1(x))
-        x = torch.relu(self.hidden2(x))
-        x = torch.relu(self.hidden3(x))
-        x = self.output(x)
-        return x
-
-
 def sim_data(args):
+    # fix seed in data generation, change seed when doing algorithm runs
+    random.seed(1024)
+    np.random.seed(1024)
     # true function: sin 3x in the range of 0-2
     f = lambda x: np.sin(3 * x)
     train_x = [np.random.uniform(0, 2) for _ in range(args.N)]
@@ -74,7 +61,7 @@ def sim_data(args):
     mem_x, mem_y, non_mem_x, non_mem_y = None, None, None, None
     if args.audit:
         train_data = list(zip(train_x, train_y))
-        train_data, mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=args.N, seed=args.seed)
+        train_data, mem_data, non_mem_data = generate_auditing_data(train_data, audit_size=args.N, seed=1024)
         train_x = [i[0] for i in train_data]
         train_y = [i[1] for i in train_data]
         mem_x = np.array([i[0] for i in mem_data])
@@ -134,7 +121,7 @@ def train(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y):
             # train_stats
             train_metric = {
                 'epoch': epoch,
-                'train_loss': torch_to_np(loss)
+                'train_loss': float(torch_to_np(loss))
             }
             if not args.debug:
                 wandb.log(train_metric)
@@ -142,14 +129,17 @@ def train(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y):
             # test_stats
             y_pred, t_loss = eval_model(net, test_x, test_y, criterion)
             test_metric = {
-                'test_loss': t_loss
+                'test_loss': float(t_loss)
             }
             if not args.debug:
                 wandb.log(test_metric)
 
             # save_plot
-            if not args.debug and epoch % 500 == 0 and not args.no_plot:
-                save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
+            if not args.debug and not args.no_plot:
+                # tmp
+                if epoch == 600 or epoch == 9300:
+                    save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
+                    save_model(net, epoch, args.save_path, args.exp_name)
 
             # audit_stats
             if args.audit:
@@ -186,7 +176,7 @@ def train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_me
             max_grad_norm=args.dp_C,
             noise_multiplier=args.dp_noise
         )
-        if not args.debug: wandb.log({'dp_noise_multiplier': args.dp_noise_multiplier})
+        if not args.debug: wandb.log({'dp_noise_multiplier': args.dp_noise})
     else:
         net, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
             module=net,
@@ -215,9 +205,11 @@ def train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_me
 
         if epoch % args.eval_every == 0:
             # train_stats
+            epsilon = privacy_engine.get_epsilon(args.delta)
             train_metric = {
                 'epoch': epoch,
-                'train_loss': torch_to_np(loss)
+                'train_loss': float(torch_to_np(loss)),
+                'dp_eps': epsilon
             }
             if not args.debug:
                 wandb.log(train_metric)
@@ -225,14 +217,15 @@ def train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_me
             # test_stats
             y_pred, t_loss = eval_model(net, test_x, test_y, criterion)
             test_metric = {
-                'test_loss': t_loss
+                'test_loss': float(t_loss)
             }
             if not args.debug:
                 wandb.log(test_metric)
 
             # save_plot
-            if not args.debug and epoch % 500 == 0 and not args.no_plot:
+            if not args.debug and not args.no_plot:
                 save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
+                save_model(net, epoch, args.save_path, args.exp_name)
 
             # audit_stats
             if args.audit:
@@ -250,24 +243,23 @@ def main():
         wandb.login()
         run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
 
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-
     train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y = sim_data(args)
-    if not args.debug:
+    if not args.debug and not args.no_plot:
         data_dict = {
             'train_x': train_x, 'train_y': train_y, 'test_x': test_x, 'test_y': test_y
         }
+        if not os.path.isdir(os.path.join(args.save_path, args.exp_name)):
+            os.mkdir(os.path.join(args.save_path, args.exp_name))
         save_path = os.path.join(args.save_path, args.exp_name, 'data_instance.pkl')
         save_data_instance(data_dict, save_path)
 
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
     if args.non_priv:
         train(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y)
     else:
         train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y)
-
-    # fixme: save model ckpt
 
 
 if __name__ == '__main__':

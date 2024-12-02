@@ -4,9 +4,23 @@ import torch
 import os
 import pickle
 
-from sim import Net
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+class Net(torch.nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.hidden1 = torch.nn.Linear(1, 64)
+        self.hidden2 = torch.nn.Linear(64, 128)
+        self.hidden3 = torch.nn.Linear(128, 64)
+        self.output = torch.nn.Linear(64, 1)
+
+    def forward(self, x):
+        x = torch.relu(self.hidden1(x))
+        x = torch.relu(self.hidden2(x))
+        x = torch.relu(self.hidden3(x))
+        x = self.output(x)
+        return x
 
 
 def np_to_torch(x):
@@ -37,23 +51,24 @@ def save_plot(train_x, train_y, net, epoch, save_path, exp_name):
     plt.plot(x_plot, predicted_y, 'b', label='Predicted Function')
     plt.legend()
     # plt.show()
-    save_path = os.path.join(save_path, exp_name)
+    save_path = os.path.join(save_path, exp_name, 'img')
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
-    plt.savefig(os.path.join(save_path, 'e{}.png'.format(epoch)))
+    plt.savefig(os.path.join(save_path, 'e_{}.png'.format(epoch)))
     plt.close()
 
 
 def save_model(model, step_num, model_path, exp_name):
-    save_path = os.path.join(model_path, exp_name)
+    save_path = os.path.join(model_path, exp_name, 'ckpt')
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
     torch.save(model.state_dict(), os.path.join(save_path, 's_{}.pt'.format(step_num)))
 
 
-def load_model(load_path, device='cuda'):
+def load_model(load_path, exp_name, load_step, device='cuda'):
+    model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
     model = Net().to(device)
-    model.load_state_dict(torch.load(load_path, weights_only=True))
+    model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     return model
 

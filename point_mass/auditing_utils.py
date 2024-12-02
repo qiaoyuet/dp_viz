@@ -285,8 +285,8 @@ def find_O1_pred_quick(member_loss_values, non_member_loss_values, delta=0.):
     best_eps = get_eps_audit(len(all_labels), total_predictions, correct_predictions, p, delta)
 
     metric = {
-        'best_eps': best_eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
-        'best_precision': best_precision, 'best_accuracy': best_accuracy,
+        'best_eps': float(best_eps), 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
+        'best_precision': best_precision, 'best_accuracy': float(best_accuracy),
         'total_predictions': total_predictions, 'correct_predictions': correct_predictions
     }
     # print(f"Best eps: {best_eps} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")

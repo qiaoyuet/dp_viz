@@ -31,16 +31,14 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 class StudentNet(torch.nn.Module):
     def __init__(self):
         super(StudentNet, self).__init__()
-        # fixme
-        self.hidden1 = torch.nn.Linear(1, 64)
-        self.hidden2 = torch.nn.Linear(64, 128)
-        self.hidden3 = torch.nn.Linear(128, 64)
-        self.output = torch.nn.Linear(64, 1)
+        self.hidden1 = torch.nn.Linear(1, 32)
+        self.hidden2 = torch.nn.Linear(32, 32)
+        self.output = torch.nn.Linear(32, 1)
 
     def forward(self, x):
         x = torch.relu(self.hidden1(x))
         x = torch.relu(self.hidden2(x))
-        x = torch.relu(self.hidden3(x))
+        # x = torch.relu(self.hidden3(x))
         x = self.output(x)
         return x
 
@@ -55,10 +53,8 @@ def distillation_loss(student_outputs, teacher_outputs, true_labels, alpha):
 @torch.no_grad()
 def eval_student(net, test_x, test_y, criterion):
     net.eval()
-    t_x = np_to_torch(test_x).to(device)
-    t_y = np_to_torch(test_y).to(device)
-    y_pred = net(t_x.unsqueeze(1))
-    t_loss = criterion(y_pred.squeeze(), t_y)
+    y_pred = net(test_x.unsqueeze(1))
+    t_loss = criterion(y_pred.squeeze(), test_y)
     t_loss = torch_to_np(t_loss)
     y_pred = torch_to_np(y_pred)
     return y_pred, t_loss
@@ -105,7 +101,7 @@ def train_student(teacher, data_dict):
                 wandb.log(test_metric)
 
             # save_plot
-            if not args.debug and epoch % 500 == 0 and not args.no_plot:
+            if not args.debug and not args.no_plot:
                 save_plot(x, y, student, epoch, args.save_path, args.exp_name)
 
 
@@ -118,13 +114,12 @@ def distill():
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    # load teacher model
-    teacher_model_path = os.path.join(args.load_path, args.load_exp_name, 's_{}.pth'.format(args.load_step))
-    teacher_model = load_model(args.teacher_model_path)
-
     # load data instance
     data_path = os.path.join(args.load_path, args.load_exp_name, 'data_instance.pkl')
     data_dict = load_data_instance(data_path)
+
+    # load teacher model
+    teacher_model = load_model(args.load_path, args.load_exp_name, args.load_step)
 
     # train student model
     train_student(teacher_model, data_dict)
