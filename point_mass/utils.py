@@ -1,10 +1,66 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+import torch.nn.functional as F
+from torch.utils.data import Dataset, Subset
 import os
 import pickle
+from opacus.validators import ModuleValidator
+from collections import OrderedDict
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+class WrapperDataset(Dataset):
+    def __init__(self, dataset):
+        super().__init__()
+
+        self.dataset = dataset
+
+    @property
+    def targets(self):
+        return self.dataset.targets
+
+    @targets.setter
+    def targets(self, __value):
+        return setattr(self.dataset, 'targets', __value)
+
+    @property
+    def transform(self):
+        return self.dataset.transform
+
+    @transform.setter
+    def transform(self, __value):
+        return setattr(self.dataset, 'transform', __value)
+
+    def __getitem__(self, i):
+        return self.dataset[i]
+
+    def __len__(self):
+        return len(self.dataset)
+
+
+class CanariesDataset(WrapperDataset):
+    def __init__(self, dataset, num_canaries=1):
+        super().__init__(dataset)
+
+        n_labels = len(dataset.dataset.classes)
+        assert num_canaries > 0
+        labels = np.array(dataset.dataset.targets[dataset.indices])
+        mask = np.arange(0, len(labels)) < num_canaries
+        np.random.seed(1024)
+        np.random.shuffle(mask)
+        rnd_labels = np.random.choice(n_labels, mask.sum())
+        labels[mask] = rnd_labels
+        # we need to explicitly cast the labels from npy.int64 to
+        # builtin int type, otherwise pytorch will fail...
+        labels = [int(x) for x in labels]
+        self.noisy_targets = labels
+
+    def __getitem__(self, i):
+        X, y = super().__getitem__(i)
+        y = self.noisy_targets[i]
+        return X, y
 
 
 class Net(torch.nn.Module):
@@ -20,6 +76,21 @@ class Net(torch.nn.Module):
         x = torch.relu(self.hidden2(x))
         x = torch.relu(self.hidden3(x))
         x = self.output(x)
+        return x
+
+
+class CNNSmall(torch.nn.Module):
+    def __init__(self):
+        super(CNNSmall, self).__init__()
+        self.conv1 = torch.nn.Conv2d(1, 16, kernel_size=5)
+        self.fc1 = torch.nn.Linear(16 * 12 * 12, 128)
+        self.fc2 = torch.nn.Linear(128, 10)
+
+    def forward(self, x):
+        x = F.relu(F.max_pool2d(self.conv1(x), 2))
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = self.fc2(x)
         return x
 
 
@@ -69,6 +140,25 @@ def load_model(load_path, exp_name, load_step, device='cuda'):
     model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
     model = Net().to(device)
     model.load_state_dict(torch.load(model_path, weights_only=True))
+    model.eval()
+    return model
+
+
+def load_priv_model(load_path, exp_name, load_step, device='cuda'):
+    model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
+    model = Net().to(device)
+    model = ModuleValidator.fix(model)
+
+    # priv engine changes module names, needs to change back when loading
+    loaded_model = torch.load(model_path, weights_only=True)
+    new_state_dict = OrderedDict()
+    for k, v in loaded_model.items():
+        assert '_module.' in k
+        if k[:8] == '_module.':
+            name = k[8:]  # remove `_module.`
+        new_state_dict[name] = v
+
+    model.load_state_dict(new_state_dict)
     model.eval()
     return model
 

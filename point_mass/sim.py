@@ -136,10 +136,8 @@ def train(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_mem_y):
 
             # save_plot
             if not args.debug and not args.no_plot:
-                # tmp
-                if epoch == 600 or epoch == 9300:
-                    save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
-                    save_model(net, epoch, args.save_path, args.exp_name)
+                save_plot(train_x, train_y, net, epoch, args.save_path, args.exp_name)
+                save_model(net, epoch, args.save_path, args.exp_name)
 
             # audit_stats
             if args.audit:

@@ -11,6 +11,8 @@
             <excludedPath path="/home/qiaoyuet/project/dp_viz/tight-pac-bayes/outputs" />
             <excludedPath path="/home/qiaoyuet/project/dp_viz/tight-pac-bayes/wandb" />
             <excludedPath path="/home/qiaoyuet/project/dp_viz/tight-pac-bayes/experiments/wandb" />
+            <excludedPath path="/home/qiaoyuet/project/dp_viz/point_mass/wandb" />
+            <excludedPath path="/home/qiaoyuet/project/dp_viz/point_mass/outouts" />
           </excludedPaths>
         </serverdata>
       </paths>

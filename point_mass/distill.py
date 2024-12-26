@@ -8,7 +8,7 @@ import wandb
 import numpy as np
 import random
 
-from utils import load_model, load_data_instance, np_to_torch, torch_to_np, save_plot
+from utils import load_model, load_data_instance, np_to_torch, torch_to_np, save_plot, load_priv_model
 
 parser = argparse.ArgumentParser(description='DistillSim')
 parser.add_argument('--seed', default=1024, type=int)
@@ -23,6 +23,7 @@ parser.add_argument('--load_exp_name', default='tmp', type=str)
 parser.add_argument('--load_step', default=-1, type=int)
 parser.add_argument('--alpha', default=0.1, type=float, help='distillation loss strength')
 parser.add_argument('--no_plot', action='store_true')
+parser.add_argument('--non_priv', action='store_true')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -32,12 +33,12 @@ class StudentNet(torch.nn.Module):
     def __init__(self):
         super(StudentNet, self).__init__()
         self.hidden1 = torch.nn.Linear(1, 32)
-        self.hidden2 = torch.nn.Linear(32, 32)
+        # self.hidden2 = torch.nn.Linear(32, 32)
         self.output = torch.nn.Linear(32, 1)
 
     def forward(self, x):
         x = torch.relu(self.hidden1(x))
-        x = torch.relu(self.hidden2(x))
+        # x = torch.relu(self.hidden2(x))
         # x = torch.relu(self.hidden3(x))
         x = self.output(x)
         return x
@@ -87,7 +88,7 @@ def train_student(teacher, data_dict):
             # train_stats
             train_metric = {
                 'epoch': epoch,
-                'train_loss': torch_to_np(loss)
+                'train_loss': float(torch_to_np(loss))
             }
             if not args.debug:
                 wandb.log(train_metric)
@@ -95,7 +96,7 @@ def train_student(teacher, data_dict):
             # test_stats
             y_pred, t_loss = eval_student(student, test_x, test_y, criterion_stu)
             test_metric = {
-                'test_loss': t_loss
+                'test_loss': float(t_loss)
             }
             if not args.debug:
                 wandb.log(test_metric)
@@ -119,7 +120,10 @@ def distill():
     data_dict = load_data_instance(data_path)
 
     # load teacher model
-    teacher_model = load_model(args.load_path, args.load_exp_name, args.load_step)
+    if args.non_priv:
+        teacher_model = load_model(args.load_path, args.load_exp_name, args.load_step)
+    else:
+        teacher_model = load_priv_model(args.load_path, args.load_exp_name, args.load_step)
 
     # train student model
     train_student(teacher_model, data_dict)
