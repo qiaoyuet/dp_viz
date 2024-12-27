@@ -83,6 +83,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--logs", help="Path to output logs directory", default="./run_scripts_viz")
     parser.add_argument("--nsamples", default="100")
     parser.add_argument("--nepochs", default="10,100,500,1000,5000,10000,50000")
     parser.add_argument("--lr", default="0.0001,0.001,0.01,0.1,1.0")
