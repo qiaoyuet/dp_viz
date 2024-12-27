@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import torch
 import torchvision
+from torchvision import models
 import random
 from collections import Counter
 import matplotlib
@@ -20,7 +21,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 from auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_v2, insert_canaries
-from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model, CNNSmall, CanariesDataset
+from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model, CNNSmall, SampleConvNet, CanariesDataset
 
 parser = argparse.ArgumentParser(description='MNISTSim')
 parser.add_argument('--seed', default=1024, type=int)
@@ -173,6 +174,7 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader):
     for epoch in tqdm(range(args.n_epoch)):
         net.train()
         for i, data in tqdm(enumerate(train_loader)):
+            net.train()
             inputs, labels = data
             inputs = inputs.to(device)
             labels = labels.to(device)

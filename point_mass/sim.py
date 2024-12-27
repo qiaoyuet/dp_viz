@@ -194,6 +194,7 @@ def train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_me
         _, init_non_mem_losses = eval_model(net, non_mem_x, non_mem_y, criterion, audit=True)
 
     for epoch in range(args.n_epoch):
+        print('train')
         net.train()
         optimizer.zero_grad()
         outputs = net(x.unsqueeze(1))
@@ -202,6 +203,7 @@ def train_priv(train_x, train_y, test_x, test_y, mem_x, mem_y, non_mem_x, non_me
         optimizer.step()
 
         if epoch % args.eval_every == 0:
+            print('eval')
             # train_stats
             epsilon = privacy_engine.get_epsilon(args.delta)
             train_metric = {

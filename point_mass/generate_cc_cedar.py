@@ -10,7 +10,7 @@ def main(args):
         #SBATCH --gres=gpu:p100:1
         #SBATCH --cpus-per-task=8
         #SBATCH --mem=32G
-        #SBATCH --time=24:00:00
+        #SBATCH --time=12:00:00
         #SBATCH --account=def-mlecuyer
         #SBATCH --output=%x-%j.out
 
@@ -31,52 +31,45 @@ def main(args):
         # export WANDB_MODE=offline
         # wandb offline
 
-        cd /home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/diffusion-ars
-
-        export PYTHONPATH=$PYTHONPATH:/home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/diffusion-ars
-
-        MODEL_FLAGS="--attention_resolutions 32,16,8 --class_cond False --diffusion_steps 1000 --image_size 256 
-        --learn_sigma True --noise_schedule linear --num_channels 256 --num_head_channels 64 --num_res_blocks 2 
-        --resblock_updown True --use_fp16 True --use_scale_shift_norm True --use_new_attention_order False"
-
-        LOG_FLAGS="--log_dir /home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/diffusion-ars/logs 
-        --model_path /home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/diffusion-ars/models/256x256_diffusion_uncond.pt
-        --dataset /home/qiaoyuet/scratch/imagenet2/imagenet"
+        cd /home/qiaoyuet/projects/def-mlecuyer/qiaoyuet/dp_viz/point_mass
 
         {python_command}
 
         echo "Done."
     """
 
-    python_command_template = "python scripts/eval_classifier_accuracy_optimize_noise.py " \
-                              "$MODEL_FLAGS $LOG_FLAGS " \
-                              "--batch_size 1 --guide_mode {guide_mode} " \
-                              "--tn_nepochs {epochs} --timestep_respacing {diffusion_steps} " \
-                              "--tn_lr_noise {lr_noise} --tn_lr_fwd {lr_fwd} " \
-                              "--train_fwd True --batch_number 100 --clip_thres {clip_thres} " \
-                              "--exp_group 1206_cedar --exp_name {name}"
+    python_command_template = "python -u mnist.py --lr {lr} --n_epoch {nepochs} --batch_size 2048 " \
+                              "--eval_every 10 --audit_proportion 0.2 " \
+                              "--target_epsilon 3.0 --dp_C {dpc} " \
+                              "--exp_group sim_mnist_priv --exp_name {name}"
 
     hyperparam_dict = {
-        'epochs': [int(item) for item in args.epochs.split(',')],
-        'diffusion_steps': [int(item) for item in args.diffusion_steps.split(',')],
-        'lr_noise': [float(item) for item in args.lr_noise.split(',')],
-        # 'lr_fwd': [float(item) for item in args.lr_fwd.split(',')],
-        'lr_fwd': [float(item) for item in args.lr_noise.split(',')],
-        'guide_mode': [str(item) for item in args.guide_mode.split(',')],
-        'clip_thres': [float(item) for item in args.clip_thres.split(',')],
+        # 'nsamples': [int(item) for item in args.nsamples.split(',')],
+        'nepochs': [int(item) for item in args.nepochs.split(',')],
+        'lr': [float(item) for item in args.lr.split(',')],
+        # 'ap': [float(item) for item in args.ap.split(',')],
+        'dpc': [float(item) for item in args.dpc.split(',')],
     }
     keys, values = zip(*hyperparam_dict.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
     for tmp_dict in permutations_dicts:
-        name = 'bs1_mse_m{}_e{}_lrn{}_lrf{}_d{}_t{}'.format(
-            tmp_dict['guide_mode'], tmp_dict['epochs'], tmp_dict['lr_noise'], tmp_dict['lr_fwd'],
-            tmp_dict['diffusion_steps'], int(tmp_dict['clip_thres'])
+        # name = 'eps2_n{}_e{}_lr{}_c{}'.format(
+        #     tmp_dict['nsamples'], tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
+        # )
+        # name = 'nonpriv_e{}_lr{}_bs2048_ap{}'.format(
+        #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['ap']
+        # )
+        name = 'priv3_e{}_lr{}_c{}'.format(
+            tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
         )
         python_command = python_command_template.format(
-            guide_mode=tmp_dict['guide_mode'], epochs=tmp_dict['epochs'],
-            diffusion_steps=tmp_dict['diffusion_steps'], clip_thres=tmp_dict['clip_thres'],
-            lr_noise=tmp_dict['lr_noise'], lr_fwd=tmp_dict['lr_fwd'], name=name
+            # nsamples=tmp_dict['nsamples'],
+            nepochs=tmp_dict['nepochs'],
+            lr=tmp_dict['lr'],
+            # ap=tmp_dict['ap'],
+            dpc=tmp_dict['dpc'],
+            name=name
         )
 
         script_content = dedent(run_script_template.format(python_command=python_command))
