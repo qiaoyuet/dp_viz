@@ -21,7 +21,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 from auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_v2, insert_canaries
-from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model, CNNSmall, SampleConvNet, CanariesDataset
+from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model, CNNSmall, CanariesDataset
 
 parser = argparse.ArgumentParser(description='MNISTSim')
 parser.add_argument('--seed', default=1024, type=int)

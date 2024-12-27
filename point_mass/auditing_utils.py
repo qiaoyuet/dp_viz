@@ -6,32 +6,32 @@ import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset, Subset, ConcatDataset
-from pactl.data import WrapperDataset
+# from pactl.data import WrapperDataset
 
 
-class CanariesDataset(WrapperDataset):
-    def __init__(self, dataset, n_labels=10, num_canaries=0):
-        super().__init__(dataset)
-
-        self.C = n_labels
-        # self.data = dataset.data
-
-        if num_canaries > 0:
-            labels = np.array(self.targets)
-            mask = np.arange(0, len(labels)) < num_canaries
-            np.random.seed(1024)
-            np.random.shuffle(mask)
-            rnd_labels = np.random.choice(self.C, mask.sum())
-            labels[mask] = rnd_labels
-            # we need to explicitly cast the labels from npy.int64 to
-            # builtin int type, otherwise pytorch will fail...
-            labels = [int(x) for x in labels]
-            self.noisy_targets = labels
-
-    def __getitem__(self, i):
-        X, y = super().__getitem__(i)
-        y = self.noisy_targets[i]
-        return X, y
+# class CanariesDataset(WrapperDataset):
+#     def __init__(self, dataset, n_labels=10, num_canaries=0):
+#         super().__init__(dataset)
+#
+#         self.C = n_labels
+#         # self.data = dataset.data
+#
+#         if num_canaries > 0:
+#             labels = np.array(self.targets)
+#             mask = np.arange(0, len(labels)) < num_canaries
+#             np.random.seed(1024)
+#             np.random.shuffle(mask)
+#             rnd_labels = np.random.choice(self.C, mask.sum())
+#             labels[mask] = rnd_labels
+#             # we need to explicitly cast the labels from npy.int64 to
+#             # builtin int type, otherwise pytorch will fail...
+#             labels = [int(x) for x in labels]
+#             self.noisy_targets = labels
+#
+#     def __getitem__(self, i):
+#         X, y = super().__getitem__(i)
+#         y = self.noisy_targets[i]
+#         return X, y
 
 
 def insert_canaries(train_data, num_classes, audit_size, seed, label_noise=1):

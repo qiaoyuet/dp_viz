@@ -26,6 +26,9 @@ def main(args):
         pip install --no-index matplotlib
         pip install --no-index wandb
         pip install --no-index scipy
+        pip install --no-index opacus
+        pip install --no-index tqdm
+        pip install --no-index scikit-learn
 
         # wandb login b7617eecafac1c7019d5cf07b1aadac73891e3d8
         # export WANDB_MODE=offline
