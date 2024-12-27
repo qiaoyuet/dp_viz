@@ -61,7 +61,7 @@ def main(args):
         #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['ap']
         # )
         name = 'priv3_e{}_lr{}_c{}'.format(
-            tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
+            tmp_dict['nepochs'], tmp_dict['lr'], int(tmp_dict['dpc'])
         )
         python_command = python_command_template.format(
             # nsamples=tmp_dict['nsamples'],
