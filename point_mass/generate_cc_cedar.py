@@ -42,6 +42,7 @@ def main(args):
     """
 
     python_command_template = "python -u mnist.py --lr {lr} --n_epoch {nepochs} --batch_size 2048 " \
+                              "--data_path /home/qiaoyuet/project/data " \
                               "--eval_every 10 --audit_proportion 0.2 " \
                               "--target_epsilon 3.0 --dp_C {dpc} " \
                               "--exp_group sim_mnist_priv --exp_name {name}"
