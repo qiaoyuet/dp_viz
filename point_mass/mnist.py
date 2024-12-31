@@ -38,13 +38,14 @@ parser.add_argument('--no_plot', action='store_true')
 parser.add_argument('--exp_group', default='tmp', type=str)
 parser.add_argument('--exp_name', default='tmp', type=str)
 parser.add_argument('--data_path', default='/home/qiaoyuet/project/data', type=str)
-parser.add_argument('--save_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim', type=str)
+parser.add_argument('--save_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim_mnist', type=str)
 parser.add_argument('--l2_reg', default=0.0, type=float)
 parser.add_argument('--target_epsilon', default=-1., type=float)
 parser.add_argument('--delta', default=1e-5, type=float)
 parser.add_argument('--dp_C', default=1., type=float)
 parser.add_argument('--dp_noise', default=-1., type=float)
 parser.add_argument('--non_priv', action='store_true')
+parser.add_argument('--save_mode', action='store_true')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -133,6 +134,9 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader):
                     if not args.debug:
                         wandb.log(audit_metrics)
 
+            if args.save_mode and (step_counter == 10 or step_counter == 100 or step_counter == 2000):
+                save_model(net, step_counter, args.save_path, args.exp_name)
+
 
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader):
     net = CNNSmall().to(device)
@@ -174,18 +178,19 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader):
     for epoch in tqdm(range(args.n_epoch)):
         net.train()
         for i, data in tqdm(enumerate(train_loader)):
-            net.train()
+            net.train()  # opacus issue: if not added every time it returns activation list empty error
             inputs, labels = data
             inputs = inputs.to(device)
             labels = labels.to(device)
             optimizer.zero_grad()
+            # net.zero_grad()  # opacus issue: memory leak
             outputs = net(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             step_counter += 1
 
-            if step_counter % args.eval_every == 0:
+            if step_counter % args.eval_every == 0 or step_counter == 1500:
                 # train_stats
                 epsilon = privacy_engine.get_epsilon(args.delta)
                 train_acc, _ = eval_model(net, train_loader, audit=False)
@@ -216,6 +221,9 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader):
                     if not args.debug:
                         wandb.log(audit_metrics)
 
+            if args.save_mode and (step_counter == 30 or step_counter == 1500):
+                save_model(net, step_counter, args.save_path, args.exp_name)
+
 
 def main():
     if not args.debug:
@@ -236,10 +244,16 @@ def main():
                                            (0.1307,), (0.3081,))
                                    ]))
 
+    # set seed
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
     # optional: subset mnist data
     targets = train_data.targets
     target_indices = np.arange(len(targets))
-    train_1_idx, train_2_idx = train_test_split(target_indices, train_size=0.1, stratify=targets)
+    # train_1_idx, train_2_idx = train_test_split(target_indices, train_size=0.1, stratify=targets, random_state=1024)
+    train_1_idx, train_2_idx = train_test_split(target_indices, train_size=0.02, stratify=targets, random_state=1024)
     train_data_sub = Subset(train_data, train_1_idx)
     train_data_sub.targets = train_data.targets[train_1_idx]
     train_data_sub.data = train_data.data[train_1_idx]
@@ -251,7 +265,7 @@ def main():
         # create canaries
         targets = train_data_sub.targets
         target_indices = np.arange(len(targets))
-        train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets)
+        train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
         canary_sub = Subset(train_data_sub, canary_idx)
         orig_targets = train_data_sub.targets[canary_idx]
         idx = torch.randperm(orig_targets.nelement())

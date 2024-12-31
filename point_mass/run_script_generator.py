@@ -10,20 +10,21 @@ def main_sim(args):
     #                    "--exp_group 1129 " \
     #                    "--exp_name {name} &> tmp.out&"
     # mnist
-    # command_template = "nohup python -u mnist.py --lr {lr} --n_epoch {nepochs} --batch_size 2048 " \
-    #                    "--eval_every 10 --audit --audit_proportion {ap} --non_priv " \
-    #                    "--exp_group sim_mnist --exp_name {name} &> tmp.out&"
-    command_template = "nohup python -u mnist.py --lr {lr} --n_epoch {nepochs} --batch_size 2048 " \
+    # command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
+    #                    "--eval_every 10 --audit --audit_proportion 0.2 --non_priv " \
+    #                    "--exp_group sim_mnist_1200_1230 --exp_name {name} &> tmp.out&"
+    command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
                        "--eval_every 10 --audit --audit_proportion 0.2 " \
-                       "--target_epsilon 3.0 --dp_C {dpc} " \
-                       "--exp_group sim_mnist_priv --exp_name {name} &> tmp2.out&"
+                       "--dp_C 1.0 --dp_noise {dpn} " \
+                       "--exp_group sim_mnist_priv_1200_1230 --exp_name {name} &> tmp2.out&"
 
     hyperparam_dict = {
         # 'nsamples': [int(item) for item in args.nsamples.split(',')],
-        'nepochs': [int(item) for item in args.nepochs.split(',')],
+        # 'nepochs': [int(item) for item in args.nepochs.split(',')],
         'lr': [float(item) for item in args.lr.split(',')],
         # 'ap': [float(item) for item in args.ap.split(',')],
-        'dpc': [float(item) for item in args.dpc.split(',')],
+        # 'dpc': [float(item) for item in args.dpc.split(',')],
+        'dpn': [float(item) for item in args.dpn.split(',')],
     }
     keys, values = zip(*hyperparam_dict.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
@@ -33,17 +34,22 @@ def main_sim(args):
         #     tmp_dict['nsamples'], tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
         # )
         # name = 'nonpriv_e{}_lr{}_bs2048_ap{}'.format(
-        #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['ap']
+        #     # tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['ap']
+        #     50000, tmp_dict['lr'], 0.2
         # )
-        name = 'priv3_e{}_lr{}_c{}'.format(
-            tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
+        # name = 'priv3_e{}_lr{}_c{}'.format(
+        #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
+        # )
+        name = 'priv_e{}_lr{}_c{}_n{}'.format(
+            50000, tmp_dict['lr'], 1, tmp_dict['dpn']
         )
         python_command = command_template.format(
             # nsamples=tmp_dict['nsamples'],
-            nepochs=tmp_dict['nepochs'],
+            # nepochs=tmp_dict['nepochs'],
             lr=tmp_dict['lr'],
             # ap=tmp_dict['ap'],
-            dpc=tmp_dict['dpc'],
+            # dpc=tmp_dict['dpc'],
+            dpn=tmp_dict['dpn'],
             name=name
         )
 
@@ -103,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", default="0.0001,0.001,0.01,0.1,1.0")
     parser.add_argument("--ap", default="0.3,0.4,0.5,0.6")
     parser.add_argument("--dpc", default="1.0")
+    parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
     parser.add_argument("--alpha", default="0.1,0.3,0.5,0.7,0.9")
     # parser.add_argument("--load_step", default="100,1500,2950")
     parser.add_argument("--load_step", default="10,150,2990")
