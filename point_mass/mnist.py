@@ -183,7 +183,7 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader):
             inputs = inputs.to(device)
             labels = labels.to(device)
             optimizer.zero_grad()
-            # net.zero_grad()  # opacus issue: memory leak
+            net.zero_grad()  # opacus issue: memory leak
             outputs = net(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
