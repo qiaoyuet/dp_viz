@@ -108,7 +108,7 @@ class StudentNet(torch.nn.Module):
         out = self.relu(out)
         if self.num_hidden > 0:
             for _ in range(self.num_hidden):
-                out = self.fc2(x)
+                out = self.fc2(outß)
                 out = self.relu(out)
         out = self.fc3(out)
         return out

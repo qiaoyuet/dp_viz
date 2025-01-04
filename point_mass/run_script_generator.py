@@ -73,7 +73,7 @@ def main_distill(args):
     #                    "--exp_group 1203_student --exp_name {name} --no_plot &> tmp.out&"
     command_template = "nohup python -u mnist.py " \
                        "--distill --load_exp_name save_nonpriv_e301_lr0.1 --load_step {load_step} " \
-                       "--n_epoch 10000 --lr {lr} --alpha 0.1 " \
+                       "--n_epoch 1000 --lr {lr} --alpha 0.1 " \
                        "--stu_hidden_size 100 --stu_num_hidden {n_hidden} " \
                        "--exp_group mnist_student_0103 --exp_name {name} --non_priv &> tmp3.out&"
 
@@ -107,11 +107,11 @@ def main_distill(args):
             n_hidden=tmp_dict['n_hidden']
         )
         print(python_command)
-        tmp_count += 1
-
-        if tmp_count > 10:
-            print("\n")
-            tmp_count = 0
+        # tmp_count += 1
+        #
+        # if tmp_count > 10:
+        #     print("\n")
+        #     tmp_count = 0
 
 
 if __name__ == "__main__":
