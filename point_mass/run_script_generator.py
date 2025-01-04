@@ -11,10 +11,10 @@ def main_sim(args):
     #                    "--exp_name {name} &> tmp.out&"
     # mnist
     # command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
-    #                    "--eval_every 10 --audit --audit_proportion 0.2 --non_priv " \
+    #                    "--eval_every 10 --audit --audit_proportion {ap} --non_priv " \
     #                    "--exp_group sim_mnist_1200_1230 --exp_name {name} &> tmp.out&"
     command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
-                       "--eval_every 10 --audit --audit_proportion 0.2 " \
+                       "--eval_every 10 --audit --audit_proportion 0.5 " \
                        "--dp_C 1.0 --dp_noise {dpn} " \
                        "--exp_group sim_mnist_priv_1200_1230 --exp_name {name} &> tmp2.out&"
 
@@ -35,7 +35,7 @@ def main_sim(args):
         # )
         # name = 'nonpriv_e{}_lr{}_bs2048_ap{}'.format(
         #     # tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['ap']
-        #     50000, tmp_dict['lr'], 0.2
+        #     50000, tmp_dict['lr'], tmp_dict['ap']
         # )
         # name = 'priv3_e{}_lr{}_c{}'.format(
         #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
@@ -63,41 +63,53 @@ def main_sim(args):
 
 
 def main_distill(args):
-    command_template = "nohup python -u distill.py " \
-                       "--load_exp_name nonpriv_n100_lr0.01_e3000 --load_step {load_step} " \
-                       "--n_epoch_stu {nepochs} --lr {lr} --alpha {alpha} " \
-                       "--exp_group 1203_student --exp_name {name} --no_plot --non_priv &> tmp.out&"
+    # command_template = "nohup python -u distill.py " \
+    #                    "--load_exp_name nonpriv_n100_lr0.01_e3000 --load_step {load_step} " \
+    #                    "--n_epoch_stu {nepochs} --lr {lr} --alpha {alpha} " \
+    #                    "--exp_group 1203_student --exp_name {name} --no_plot --non_priv &> tmp.out&"
     # command_template = "nohup python -u distill.py " \
     #                    "--load_exp_name eps2_n100_e3000_lr0.01_c0.1 --load_step {load_step} " \
     #                    "--n_epoch_stu {nepochs} --lr {lr} --alpha {alpha} " \
     #                    "--exp_group 1203_student --exp_name {name} --no_plot &> tmp.out&"
+    command_template = "nohup python -u mnist.py " \
+                       "--distill --load_exp_name save_nonpriv_e301_lr0.1 --load_step {load_step} " \
+                       "--n_epoch 10000 --lr {lr} --alpha 0.1 " \
+                       "--stu_hidden_size 100 --stu_num_hidden {n_hidden} " \
+                       "--exp_group mnist_student_0103 --exp_name {name} --non_priv &> tmp3.out&"
 
     hyperparam_dict = {
         'load_step': [int(item) for item in args.load_step.split(',')],
-        'nepochs': [int(item) for item in args.nepochs.split(',')],
+        # 'nepochs': [int(item) for item in args.nepochs.split(',')],
         'lr': [float(item) for item in args.lr.split(',')],
-        'alpha': [float(item) for item in args.alpha.split(',')],
+        # 'alpha': [float(item) for item in args.alpha.split(',')],
+        'n_hidden': [str(item) for item in args.n_hidden.split(',')],
     }
     keys, values = zip(*hyperparam_dict.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
     tmp_count = 0
     for tmp_dict in permutations_dicts:
-        name = 'stu_non_priv_e{}_lr{}_a{}_s{}'.format(
-            tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['alpha'], tmp_dict['load_step']
-        )
+        # name = 'stu_non_priv_e{}_lr{}_a{}_s{}'.format(
+        #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['alpha'], tmp_dict['load_step']
+        # )
         # name = 'stu_eps2_e{}_lr{}_a{}_s{}'.format(
         #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['alpha'], tmp_dict['load_step']
         # )
+        name = 'stu_nonpriv_e10000_lr{}_a0.1_{}by100_s{}'.format(
+            tmp_dict['lr'], tmp_dict['n_hidden'], tmp_dict['load_step']
+        )
         python_command = command_template.format(
-            nepochs=tmp_dict['nepochs'],
-            lr=tmp_dict['lr'], alpha=tmp_dict['alpha'], name=name,
-            load_step=tmp_dict['load_step']
+            # nepochs=tmp_dict['nepochs'],
+            lr=tmp_dict['lr'],
+            # alpha=tmp_dict['alpha'],
+            name=name,
+            load_step=tmp_dict['load_step'],
+            n_hidden=tmp_dict['n_hidden']
         )
         print(python_command)
         tmp_count += 1
 
-        if tmp_count > 15:
+        if tmp_count > 10:
             print("\n")
             tmp_count = 0
 
@@ -106,13 +118,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nsamples", default="100")
     parser.add_argument("--nepochs", default="10,100,500,1000,5000,10000,50000")
-    parser.add_argument("--lr", default="0.0001,0.001,0.01,0.1,1.0")
-    parser.add_argument("--ap", default="0.3,0.4,0.5,0.6")
+    parser.add_argument("--lr", default="0.001,0.01,0.1,1.0")
+    parser.add_argument("--ap", default="0.1,0.3,0.4,0.5")
     parser.add_argument("--dpc", default="1.0")
     parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
     parser.add_argument("--alpha", default="0.1,0.3,0.5,0.7,0.9")
     # parser.add_argument("--load_step", default="100,1500,2950")
-    parser.add_argument("--load_step", default="10,150,2990")
+    parser.add_argument("--load_step", default="10,100,2000")
+    parser.add_argument("--n_hidden", default="0,1,2")
     args = parser.parse_args()
-    main_sim(args)
-    # main_distill(args)
+    # main_sim(args)
+    main_distill(args)

@@ -94,6 +94,26 @@ class CNNSmall(torch.nn.Module):
         return x
 
 
+class StudentNet(torch.nn.Module):
+    def __init__(self, input_size, num_hidden, hidden_size, num_classes):
+        super(StudentNet, self).__init__()
+        self.fc1 = torch.nn.Linear(input_size, hidden_size)
+        self.relu = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(hidden_size, hidden_size)
+        self.fc3 = torch.nn.Linear(hidden_size, num_classes)
+        self.num_hidden = num_hidden
+
+    def forward(self, x):
+        out = self.fc1(x)
+        out = self.relu(out)
+        if self.num_hidden > 0:
+            for _ in range(self.num_hidden):
+                out = self.fc2(x)
+                out = self.relu(out)
+        out = self.fc3(out)
+        return out
+
+
 def np_to_torch(x):
     return torch.from_numpy(x).to(torch.float32).to(device)
     # return torch.from_numpy(x).to(torch.float32)
@@ -140,7 +160,8 @@ def save_model(model, step_num, model_path, exp_name):
 
 def load_model(load_path, exp_name, load_step, device='cuda'):
     model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
-    model = Net().to(device)
+    # model = Net().to(device)
+    model = CNNSmall().to(device)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     return model
@@ -148,7 +169,8 @@ def load_model(load_path, exp_name, load_step, device='cuda'):
 
 def load_priv_model(load_path, exp_name, load_step, device='cuda'):
     model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
-    model = Net().to(device)
+    # model = Net().to(device)
+    model = CNNSmall().to(device)
     model = ModuleValidator.fix(model)
 
     # priv engine changes module names, needs to change back when loading
