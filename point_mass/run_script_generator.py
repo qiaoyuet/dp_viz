@@ -124,7 +124,7 @@ if __name__ == "__main__":
     parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
     parser.add_argument("--alpha", default="0.1,0.3,0.5,0.7,0.9")
     # parser.add_argument("--load_step", default="100,1500,2950")
-    parser.add_argument("--load_step", default="10,100,2000")
+    parser.add_argument("--load_step", default="10,20,30,50,100,300")
     parser.add_argument("--n_hidden", default="0,1,2")
     args = parser.parse_args()
     # main_sim(args)
