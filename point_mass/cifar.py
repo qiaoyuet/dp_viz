@@ -429,9 +429,10 @@ def main():
     train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
     canary_sub = Subset(train_data_sub, canary_idx)
     orig_targets = [train_data_sub.targets[i] for i in canary_idx]
-    idx = torch.randperm(torch.tensor(orig_targets).nelement())
-    new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
-    canary_sub.targets = new_targets
+    # idx = torch.randperm(torch.tensor(orig_targets).nelement())
+    # new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
+    # canary_sub.targets = new_targets
+    canary_sub.targets = orig_targets
     canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
     new_train_sub = Subset(train_data_sub, train_idx)
     mem_data, non_mem_data = torch.utils.data.random_split(
