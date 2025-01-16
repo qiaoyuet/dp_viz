@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import torch
 import torchvision
+import torchvision.transforms as transforms
 from torchvision import models
 import random
 from collections import Counter
@@ -23,7 +24,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 from auditing_utils import find_O1_pred, generate_auditing_data, find_O1_pred_v2, insert_canaries
-from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model, CNNSmall, \
+from utils import torch_to_np, np_to_torch, save_plot, save_data_instance, Net, save_model, CNNCifar, \
     CanariesDataset, StudentNet, load_model, load_priv_model, StudentCNN
 
 parser = argparse.ArgumentParser(description='MNISTSim')
@@ -36,12 +37,13 @@ parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--eval_every', default=1, type=int)
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--audit', action='store_true')
+parser.add_argument('--train_proportion', default=0.1, type=float)
 parser.add_argument('--audit_proportion', default=0.1, type=float)
 parser.add_argument('--no_plot', action='store_true')
 parser.add_argument('--exp_group', default='tmp', type=str)
 parser.add_argument('--exp_name', default='tmp', type=str)
 parser.add_argument('--data_path', default='/home/qiaoyuet/project/data', type=str)
-parser.add_argument('--save_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim_mnist', type=str)
+parser.add_argument('--save_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim_cifar', type=str)
 parser.add_argument('--l2_reg', default=0.0, type=float)
 parser.add_argument('--target_epsilon', default=-1., type=float)
 parser.add_argument('--delta', default=1e-5, type=float)
@@ -139,7 +141,7 @@ def eval_stu_model(net, loader):
 
 
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    net = CNNSmall().to(device)
+    net = CNNCifar().to(device)
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr)
 
@@ -388,33 +390,35 @@ def main():
         wandb.login()
         run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
 
-    # load mnist data
-    train_data = torchvision.datasets.MNIST(args.data_path, train=True, download=True,
-                                   transform=torchvision.transforms.Compose([
-                                       torchvision.transforms.ToTensor(),
-                                       torchvision.transforms.Normalize(
-                                           (0.1307,), (0.3081,))
-                                   ]))
-    test_data = torchvision.datasets.MNIST(args.data_path, train=False, download=True,
-                                   transform=torchvision.transforms.Compose([
-                                       torchvision.transforms.ToTensor(),
-                                       torchvision.transforms.Normalize(
-                                           (0.1307,), (0.3081,))
-                                   ]))
+    # load cifar10 data
+    transform = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+    train_data = torchvision.datasets.CIFAR10(root=args.data_path, train=True,
+                                              download=True, transform=transform)
+    test_data = torchvision.datasets.CIFAR10(root=args.data_path, train=False,
+                                             download=True, transform=transform)
 
     # set seed
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    # optional: subset mnist data
+    # optional: subset cifar10 data
     targets = train_data.targets
     target_indices = np.arange(len(targets))
-    # train_1_idx, train_2_idx = train_test_split(target_indices, train_size=0.1, stratify=targets, random_state=1024)
-    train_1_idx, train_2_idx = train_test_split(target_indices, train_size=0.02, stratify=targets, random_state=1024)
+    train_1_idx, train_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
     train_data_sub = Subset(train_data, train_1_idx)
-    train_data_sub.targets = train_data.targets[train_1_idx]
-    train_data_sub.data = train_data.data[train_1_idx]
+    train_data_sub.targets = [train_data.targets[i] for i in train_1_idx]
+    train_data_sub.data = [train_data.data[i] for i in train_1_idx]
+    # down size test set size too
+    targets = test_data.targets
+    target_indices = np.arange(len(targets))
+    test_1_idx, test_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
+    test_data_sub = Subset(test_data, test_1_idx)
+    test_data_sub.targets = [test_data.targets[i] for i in test_1_idx]
+    test_data_sub.data = [test_data.data[i] for i in test_1_idx]
 
     train_loader = torch.utils.data.DataLoader(train_data_sub, batch_size=args.batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
@@ -424,11 +428,11 @@ def main():
     target_indices = np.arange(len(targets))
     train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
     canary_sub = Subset(train_data_sub, canary_idx)
-    orig_targets = train_data_sub.targets[canary_idx]
-    idx = torch.randperm(orig_targets.nelement())
-    new_targets = orig_targets.view(-1)[idx].view(orig_targets.size())
+    orig_targets = [train_data_sub.targets[i] for i in canary_idx]
+    idx = torch.randperm(torch.tensor(orig_targets).nelement())
+    new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
     canary_sub.targets = new_targets
-    canary_sub.data = train_data_sub.data[canary_idx]
+    canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
     new_train_sub = Subset(train_data_sub, train_idx)
     mem_data, non_mem_data = torch.utils.data.random_split(
         canary_sub, [0.5, 0.5],
@@ -440,6 +444,7 @@ def main():
     non_mem_loader = torch.utils.data.DataLoader(non_mem_data, batch_size=args.batch_size, shuffle=True)  # noisy test
     if not args.debug:
         wandb.log({'num_mem': len(mem_data), 'num_non_mem': len(non_mem_data)})
+    # mem_loader, non_mem_loader, clean_train_loader = train_loader, train_loader, train_loader
 
     # set seed
     np.random.seed(args.seed)
@@ -456,24 +461,6 @@ def main():
     elif args.distill and not args.non_priv:
         teacher_model = load_priv_model(args.load_path, args.load_exp_name, args.load_step)
         train_student(teacher_model, train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader)
-
-    # # tmp
-    # train_loader = torch.utils.data.DataLoader(new_train_data, batch_size=1, shuffle=True)  # mixed train
-    # clean_train_loader = torch.utils.data.DataLoader(new_train_sub, batch_size=1, shuffle=True)  # clean train
-    # mem_loader = torch.utils.data.DataLoader(mem_data, batch_size=1, shuffle=True)  # noisy train
-    # non_mem_loader = torch.utils.data.DataLoader(non_mem_data, batch_size=1, shuffle=True)  #
-    # test_loader = torch.utils.data.DataLoader(test_data, batch_size=1, shuffle=True)
-    # # teacher_model = load_model(args.load_path, args.load_exp_name, args.load_step)
-    # for load_step_num in [10, 20, 30, 50, 100, 300]:
-    #     print('Step {}:'.format(load_step_num))
-    #     teacher_model = load_model(args.load_path, "save_nonpriv_e301_lr0.1", load_step_num)
-    #     mem_acc, _ = eval_ckpt(teacher_model, mem_loader)
-    #     train_acc, _ = eval_ckpt(teacher_model, train_loader)
-    #     test_acc, _ = eval_ckpt(teacher_model, test_loader)
-    #     clean_train_acc, _ = eval_ckpt(teacher_model, clean_train_loader)
-    #     non_mem_acc, _ = eval_ckpt(teacher_model, non_mem_loader)
-    #     print('train_acc = {:.3f}, clean_train_acc = {:.3f}, mem_acc = {:.3f}, non_mem_acc = {:.3f}, test_acc = {:.3f} \n'.format(
-    #         train_acc, clean_train_acc, mem_acc, non_mem_acc, test_acc))
 
 
 if __name__ == '__main__':

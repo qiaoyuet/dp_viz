@@ -73,16 +73,23 @@ def main_distill(args):
     #                    "--exp_group 1203_student --exp_name {name} --no_plot &> tmp.out&"
     command_template = "nohup python -u mnist.py " \
                        "--distill --load_exp_name save_nonpriv_e301_lr0.1 --load_step {load_step} " \
-                       "--n_epoch 1000 --lr {lr} --alpha 0.1 " \
-                       "--stu_hidden_size 100 --stu_num_hidden {n_hidden} " \
-                       "--exp_group mnist_student_0103 --exp_name {name} --non_priv &> tmp3.out&"
+                       "--n_epoch 20 --lr {lr} --alpha 1 " \
+                       "--stu_num_out_channels {num_out} " \
+                       "--exp_group mnist_studentcnn_0108 --exp_name {name} --non_priv &> tmp2.out&"
+    # command_template = "nohup python -u mnist.py " \
+    #                    "--distill --load_exp_name save_priv_e2501_lr0.01_c1_n50 --load_step {load_step} " \
+    #                    "--n_epoch 20 --lr {lr} --alpha 1 " \
+    #                    "--stu_hidden_size 256 --stu_num_hidden 1 " \
+    #                    "--exp_group mnist_student_0107 --exp_name {name} &> tmp3.out&"
 
     hyperparam_dict = {
         'load_step': [int(item) for item in args.load_step.split(',')],
         # 'nepochs': [int(item) for item in args.nepochs.split(',')],
         'lr': [float(item) for item in args.lr.split(',')],
         # 'alpha': [float(item) for item in args.alpha.split(',')],
-        'n_hidden': [str(item) for item in args.n_hidden.split(',')],
+        # 'n_hidden': [str(item) for item in args.n_hidden.split(',')],
+        # 'hidden_size': [str(item) for item in args.hidden_size.split(',')],
+        'num_out': [str(item) for item in args.num_out.split(',')],
     }
     keys, values = zip(*hyperparam_dict.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
@@ -95,37 +102,45 @@ def main_distill(args):
         # name = 'stu_eps2_e{}_lr{}_a{}_s{}'.format(
         #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['alpha'], tmp_dict['load_step']
         # )
-        name = 'stu_nonpriv_e10000_lr{}_a0.1_{}by100_s{}'.format(
-            tmp_dict['lr'], tmp_dict['n_hidden'], tmp_dict['load_step']
+        name = 'stu_nonpriv_e20_lr{}_a1_o{}_s{}'.format(
+            tmp_dict['lr'], tmp_dict['num_out'], tmp_dict['load_step']
         )
+        # name = 'stu_priv_e20_lr{}_a1_1by256_s{}'.format(
+        #     tmp_dict['lr'], tmp_dict['load_step']
+        # )
         python_command = command_template.format(
             # nepochs=tmp_dict['nepochs'],
             lr=tmp_dict['lr'],
             # alpha=tmp_dict['alpha'],
             name=name,
             load_step=tmp_dict['load_step'],
-            n_hidden=tmp_dict['n_hidden']
+            # n_hidden=tmp_dict['n_hidden']
+            # hidden_size=tmp_dict['hidden_size']
+            num_out=tmp_dict['num_out']
         )
         print(python_command)
-        # tmp_count += 1
-        #
-        # if tmp_count > 10:
-        #     print("\n")
-        #     tmp_count = 0
+        tmp_count += 1
+
+        if tmp_count > 40:
+            print("\n")
+            tmp_count = 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nsamples", default="100")
     parser.add_argument("--nepochs", default="10,100,500,1000,5000,10000,50000")
-    parser.add_argument("--lr", default="0.001,0.01,0.1,1.0")
+    parser.add_argument("--lr", default="0.1,0.5,1.0,1.5")
     parser.add_argument("--ap", default="0.1,0.3,0.4,0.5")
     parser.add_argument("--dpc", default="1.0")
     parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
-    parser.add_argument("--alpha", default="0.1,0.3,0.5,0.7,0.9")
+    parser.add_argument("--alpha", default="0.9")
     # parser.add_argument("--load_step", default="100,1500,2950")
+    # parser.add_argument("--load_step", default="10,50,100,250,500,2500")
     parser.add_argument("--load_step", default="10,20,30,50,100,300")
-    parser.add_argument("--n_hidden", default="0,1,2")
+    parser.add_argument("--n_hidden", default="1")
+    parser.add_argument("--hidden_size", default="256,64,16")
+    parser.add_argument("--num_out", default="1")
     args = parser.parse_args()
     # main_sim(args)
     main_distill(args)

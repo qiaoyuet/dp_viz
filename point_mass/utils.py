@@ -94,6 +94,44 @@ class CNNSmall(torch.nn.Module):
         return x
 
 
+class CNNCifar(torch.nn.Module):
+    def __init__(self):
+        super(CNNCifar, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 64, kernel_size=3, padding=1)
+        self.conv2 = torch.nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.conv3 = torch.nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.conv4 = torch.nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.fc1 = torch.nn.Linear(512 * 8 * 8, 1024)
+        self.fc2 = torch.nn.Linear(1024, 512)
+        self.fc3 = torch.nn.Linear(512, 10)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.pool = torch.nn.MaxPool2d(2, 2)
+
+    def forward(self, x):
+        x = self.relu(self.conv1(x))
+        x = self.pool(self.relu(self.conv2(x)))
+        x = self.relu(self.conv3(x))
+        x = self.pool(self.relu(self.conv4(x)))
+        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = self.relu(self.fc1(x))
+        x = self.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+
+class StudentCNN(torch.nn.Module):
+    def __init__(self, out_channels, num_classes):
+        super(StudentCNN, self).__init__()
+        self.conv1 = torch.nn.Conv2d(1, out_channels, kernel_size=5)
+        self.fc1 = torch.nn.Linear(out_channels * 12 * 12, num_classes)
+
+    def forward(self, x):
+        x = F.relu(F.max_pool2d(self.conv1(x), 2))
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        return x
+
+
 class StudentNet(torch.nn.Module):
     def __init__(self, input_size, num_hidden, hidden_size, num_classes):
         super(StudentNet, self).__init__()
