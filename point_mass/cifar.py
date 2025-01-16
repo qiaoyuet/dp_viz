@@ -420,32 +420,32 @@ def main():
     # test_data_sub.targets = [test_data.targets[i] for i in test_1_idx]
     # test_data_sub.data = [test_data.data[i] for i in test_1_idx]
 
-    # train_loader = torch.utils.data.DataLoader(train_data_sub, batch_size=args.batch_size, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_data_sub, batch_size=args.batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
-    # create canaries
-    targets = train_data_sub.targets
-    target_indices = np.arange(len(targets))
-    train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
-    canary_sub = Subset(train_data_sub, canary_idx)
-    orig_targets = [train_data_sub.targets[i] for i in canary_idx]
-    # idx = torch.randperm(torch.tensor(orig_targets).nelement())
-    # new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
-    # canary_sub.targets = new_targets
-    canary_sub.targets = orig_targets  # no label noise
-    canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
-    new_train_sub = Subset(train_data_sub, train_idx)
-    mem_data, non_mem_data = torch.utils.data.random_split(
-        canary_sub, [0.5, 0.5],
-        generator=torch.Generator().manual_seed(1024))
-    new_train_data = torch.utils.data.ConcatDataset([new_train_sub, mem_data])
-    train_loader = torch.utils.data.DataLoader(new_train_data, batch_size=args.batch_size, shuffle=True)
-    clean_train_loader = torch.utils.data.DataLoader(new_train_sub, batch_size=args.batch_size, shuffle=True)  # clean train
-    mem_loader = torch.utils.data.DataLoader(mem_data, batch_size=args.batch_size, shuffle=True)  # noisy train
-    non_mem_loader = torch.utils.data.DataLoader(non_mem_data, batch_size=args.batch_size, shuffle=True)  # noisy test
-    if not args.debug:
-        wandb.log({'num_mem': len(mem_data), 'num_non_mem': len(non_mem_data)})
-    # mem_loader, non_mem_loader, clean_train_loader = train_loader, train_loader, train_loader
+    # # create canaries
+    # targets = train_data_sub.targets
+    # target_indices = np.arange(len(targets))
+    # train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
+    # canary_sub = Subset(train_data_sub, canary_idx)
+    # orig_targets = [train_data_sub.targets[i] for i in canary_idx]
+    # # idx = torch.randperm(torch.tensor(orig_targets).nelement())
+    # # new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
+    # # canary_sub.targets = new_targets
+    # canary_sub.targets = orig_targets  # no label noise
+    # canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
+    # new_train_sub = Subset(train_data_sub, train_idx)
+    # mem_data, non_mem_data = torch.utils.data.random_split(
+    #     canary_sub, [0.5, 0.5],
+    #     generator=torch.Generator().manual_seed(1024))
+    # new_train_data = torch.utils.data.ConcatDataset([new_train_sub, mem_data])
+    # train_loader = torch.utils.data.DataLoader(new_train_data, batch_size=args.batch_size, shuffle=True)
+    # clean_train_loader = torch.utils.data.DataLoader(new_train_sub, batch_size=args.batch_size, shuffle=True)  # clean train
+    # mem_loader = torch.utils.data.DataLoader(mem_data, batch_size=args.batch_size, shuffle=True)  # noisy train
+    # non_mem_loader = torch.utils.data.DataLoader(non_mem_data, batch_size=args.batch_size, shuffle=True)  # noisy test
+    # if not args.debug:
+    #     wandb.log({'num_mem': len(mem_data), 'num_non_mem': len(non_mem_data)})
+    mem_loader, non_mem_loader, clean_train_loader = train_loader, train_loader, train_loader
 
     # set seed
     np.random.seed(args.seed)
