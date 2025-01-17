@@ -145,7 +145,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
     # net = CNNCifar().to(device)
     net = ResNet18().to(device)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr)
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
     if args.audit:
         # compute initial loss value as auditing score baseline (optional)
