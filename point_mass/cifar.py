@@ -413,12 +413,12 @@ def main():
     train_data_sub.targets = [train_data.targets[i] for i in train_1_idx]
     train_data_sub.data = [train_data.data[i] for i in train_1_idx]
     # # down size test set size too
-    # targets = test_data.targets
-    # target_indices = np.arange(len(targets))
-    # test_1_idx, test_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
-    # test_data_sub = Subset(test_data, test_1_idx)
-    # test_data_sub.targets = [test_data.targets[i] for i in test_1_idx]
-    # test_data_sub.data = [test_data.data[i] for i in test_1_idx]
+    targets = test_data.targets
+    target_indices = np.arange(len(targets))
+    test_1_idx, test_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
+    test_data_sub = Subset(test_data, test_1_idx)
+    test_data_sub.targets = [test_data.targets[i] for i in test_1_idx]
+    test_data_sub.data = [test_data.data[i] for i in test_1_idx]
 
     train_loader = torch.utils.data.DataLoader(train_data_sub, batch_size=args.batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)

@@ -13,10 +13,14 @@ def main_sim(args):
     # command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
     #                    "--eval_every 10 --audit --audit_proportion {ap} --non_priv " \
     #                    "--exp_group sim_mnist_1200_1230 --exp_name {name} &> tmp.out&"
-    command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
-                       "--eval_every 10 --audit --audit_proportion 0.5 " \
-                       "--dp_C 1.0 --dp_noise {dpn} " \
-                       "--exp_group sim_mnist_priv_1200_1230 --exp_name {name} &> tmp2.out&"
+    # command_template = "nohup python -u mnist.py --lr {lr} --n_epoch 50000 --batch_size 2048 " \
+    #                    "--eval_every 10 --audit --audit_proportion 0.5 " \
+    #                    "--dp_C 1.0 --dp_noise {dpn} " \
+    #                    "--exp_group sim_mnist_priv_1200_1230 --exp_name {name} &> tmp2.out&"
+    # cifar
+    command_template = "nohup python -u cifar.py --lr {lr} --n_epoch 5000 --batch_size 1024 " \
+                       "--eval_every 100 --train_proportion {tp} --non_priv " \
+                       "--exp_group sim_cifar --exp_name {name} &> tmp2.out&"
 
     hyperparam_dict = {
         # 'nsamples': [int(item) for item in args.nsamples.split(',')],
@@ -24,7 +28,8 @@ def main_sim(args):
         'lr': [float(item) for item in args.lr.split(',')],
         # 'ap': [float(item) for item in args.ap.split(',')],
         # 'dpc': [float(item) for item in args.dpc.split(',')],
-        'dpn': [float(item) for item in args.dpn.split(',')],
+        # 'dpn': [float(item) for item in args.dpn.split(',')],
+        'tp': [float(item) for item in args.ap.split(',')],
     }
     keys, values = zip(*hyperparam_dict.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
@@ -40,8 +45,11 @@ def main_sim(args):
         # name = 'priv3_e{}_lr{}_c{}'.format(
         #     tmp_dict['nepochs'], tmp_dict['lr'], tmp_dict['dpc']
         # )
-        name = 'priv_e{}_lr{}_c{}_n{}'.format(
-            50000, tmp_dict['lr'], 1, tmp_dict['dpn']
+        # name = 'priv_e{}_lr{}_c{}_n{}'.format(
+        #     50000, tmp_dict['lr'], 1, tmp_dict['dpn']
+        # )
+        name = 'nonpriv_e5000_lr{}_tp{}'.format(
+            tmp_dict['lr'], tmp_dict['tp']
         )
         python_command = command_template.format(
             # nsamples=tmp_dict['nsamples'],
@@ -49,7 +57,8 @@ def main_sim(args):
             lr=tmp_dict['lr'],
             # ap=tmp_dict['ap'],
             # dpc=tmp_dict['dpc'],
-            dpn=tmp_dict['dpn'],
+            # dpn=tmp_dict['dpn'],
+            tp=tmp_dict['tp'],
             name=name
         )
 
@@ -130,7 +139,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nsamples", default="100")
     parser.add_argument("--nepochs", default="10,100,500,1000,5000,10000,50000")
-    parser.add_argument("--lr", default="0.1,0.5,1.0,1.5")
+    parser.add_argument("--lr", default="1.0,0.5,0.1,0.01,0.005")
     parser.add_argument("--ap", default="0.1,0.3,0.4,0.5")
     parser.add_argument("--dpc", default="1.0")
     parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
@@ -141,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_hidden", default="1")
     parser.add_argument("--hidden_size", default="256,64,16")
     parser.add_argument("--num_out", default="1")
+    parser.add_argument("--tp", default="0.9,0.7,0.5,0.3,0.1,0.05")
     args = parser.parse_args()
-    # main_sim(args)
-    main_distill(args)
+    main_sim(args)
+    # main_distill(args)
