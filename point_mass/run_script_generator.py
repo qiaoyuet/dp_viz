@@ -18,7 +18,7 @@ def main_sim(args):
     #                    "--dp_C 1.0 --dp_noise {dpn} " \
     #                    "--exp_group sim_mnist_priv_1200_1230 --exp_name {name} &> tmp2.out&"
     # cifar
-    command_template = "nohup python -u cifar.py --lr {lr} --n_epoch 5000 --batch_size 1024 " \
+    command_template = "nohup python -u cifar.py --lr {lr} --n_epoch 5000 --batch_size 2048 " \
                        "--eval_every 100 --train_proportion {tp} --non_priv " \
                        "--exp_group sim_cifar --exp_name {name} &> tmp2.out&"
 
@@ -29,7 +29,7 @@ def main_sim(args):
         # 'ap': [float(item) for item in args.ap.split(',')],
         # 'dpc': [float(item) for item in args.dpc.split(',')],
         # 'dpn': [float(item) for item in args.dpn.split(',')],
-        'tp': [float(item) for item in args.ap.split(',')],
+        'tp': [float(item) for item in args.tp.split(',')],
     }
     keys, values = zip(*hyperparam_dict.items())
     permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
@@ -150,7 +150,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_hidden", default="1")
     parser.add_argument("--hidden_size", default="256,64,16")
     parser.add_argument("--num_out", default="1")
-    parser.add_argument("--tp", default="0.9,0.7,0.5,0.3,0.1,0.05")
+    # parser.add_argument("--tp", default="0.9,0.7,0.5,0.3,0.1,0.05")
+    parser.add_argument("--tp", default="0.1")
     args = parser.parse_args()
     main_sim(args)
     # main_distill(args)

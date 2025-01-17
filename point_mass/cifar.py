@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torchvision
 import torchvision.transforms as transforms
+from resnet import ResNet18
 from torchvision import models
 import random
 from collections import Counter
@@ -141,7 +142,8 @@ def eval_stu_model(net, loader):
 
 
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    net = CNNCifar().to(device)
+    # net = CNNCifar().to(device)
+    net = ResNet18().to(device)
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr)
 
