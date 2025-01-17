@@ -426,7 +426,7 @@ def main():
         test_data_sub.data = [test_data.data[i] for i in test_1_idx]
 
         train_loader = torch.utils.data.DataLoader(train_data_sub, batch_size=args.batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
+        test_loader = torch.utils.data.DataLoader(test_data_sub, batch_size=args.batch_size, shuffle=True)
 
     # # create canaries
     # targets = train_data_sub.targets

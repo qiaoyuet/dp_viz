@@ -48,7 +48,7 @@ def main_sim(args):
         # name = 'priv_e{}_lr{}_c{}_n{}'.format(
         #     50000, tmp_dict['lr'], 1, tmp_dict['dpn']
         # )
-        name = 'nonpriv_e1000_lr{}_tp{}'.format(
+        name = 'nonpriv_e1000_lr{}_tp{}_wd'.format(
             tmp_dict['lr'], tmp_dict['tp']
         )
         python_command = command_template.format(
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nsamples", default="100")
     parser.add_argument("--nepochs", default="10,100,500,1000,5000,10000,50000")
-    parser.add_argument("--lr", default="0.01")
+    parser.add_argument("--lr", default="0.001,0.005")
     parser.add_argument("--ap", default="0.1,0.3,0.4,0.5")
     parser.add_argument("--dpc", default="1.0")
     parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_hidden", default="1")
     parser.add_argument("--hidden_size", default="256,64,16")
     parser.add_argument("--num_out", default="1")
-    parser.add_argument("--tp", default="1,0.8")
+    parser.add_argument("--tp", default="1,0.1")
     args = parser.parse_args()
     main_sim(args)
     # main_distill(args)
