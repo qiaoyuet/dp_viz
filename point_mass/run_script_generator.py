@@ -48,7 +48,7 @@ def main_sim(args):
         # name = 'priv_e{}_lr{}_c{}_n{}'.format(
         #     50000, tmp_dict['lr'], 1, tmp_dict['dpn']
         # )
-        name = 'nonpriv_e1000_lr{}_tp{}_wd'.format(
+        name = 'nonpriv_e5000_lr{}_tp{}_wd'.format(
             tmp_dict['lr'], tmp_dict['tp']
         )
         python_command = command_template.format(

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from resnet import ResNet18
+from resnet import ResNet, Bottleneck
 from torchvision import models
 import random
 from collections import Counter
@@ -143,7 +143,9 @@ def eval_stu_model(net, loader):
 
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
     # net = CNNCifar().to(device)
-    net = ResNet18().to(device)
+    # net = ResNet18().to(device)
+    layers = [3, 4, 6, 3]
+    net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
@@ -393,9 +395,17 @@ def main():
         run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
 
     # load cifar10 data
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    normalize = transforms.Normalize(
+        mean=[0.5, 0.5, 0.5],  # There are three values because
+        std=[0.2, 0.2, 0.2],  # there are 3 channels R, G, B
+    )
+
+    # define transforms
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),  # Same size as the paper
+        transforms.ToTensor(),
+        normalize,
+    ])
 
     train_data = torchvision.datasets.CIFAR10(root=args.data_path, train=True,
                                               download=True, transform=transform)
