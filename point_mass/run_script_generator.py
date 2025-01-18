@@ -18,8 +18,8 @@ def main_sim(args):
     #                    "--dp_C 1.0 --dp_noise {dpn} " \
     #                    "--exp_group sim_mnist_priv_1200_1230 --exp_name {name} &> tmp2.out&"
     # cifar
-    command_template = "nohup python -u cifar.py --lr {lr} --n_epoch 5000 --batch_size 2048 " \
-                       "--eval_every 500 --non_priv --train_proportion {tp} " \
+    command_template = "nohup python -u cifar.py --lr {lr} --n_epoch 40 --batch_size 16 " \
+                       "--eval_every 10 --non_priv --train_proportion {tp} " \
                        "--exp_group sim_cifar --exp_name {name} &> tmp2.out&"
 
     hyperparam_dict = {
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nsamples", default="100")
     parser.add_argument("--nepochs", default="10,100,500,1000,5000,10000,50000")
-    parser.add_argument("--lr", default="0.001,0.005")
+    parser.add_argument("--lr", default="0.0001,0.001,0.005,0.01")
     parser.add_argument("--ap", default="0.1,0.3,0.4,0.5")
     parser.add_argument("--dpc", default="1.0")
     parser.add_argument("--dpn", default="0.5,1.0,5.0,10.0,50.0")
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_hidden", default="1")
     parser.add_argument("--hidden_size", default="256,64,16")
     parser.add_argument("--num_out", default="1")
-    parser.add_argument("--tp", default="1,0.1")
+    parser.add_argument("--tp", default="1,0.9,0.7,0.5,0.3,0.1")
     args = parser.parse_args()
     main_sim(args)
     # main_distill(args)
