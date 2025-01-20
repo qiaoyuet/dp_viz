@@ -1,8 +1,10 @@
 import argparse
+import gc
 import numpy as np
 import torch
 import torchvision
 import torchvision.transforms as transforms
+from torch.utils.data.sampler import SubsetRandomSampler
 from resnet import ResNet, Bottleneck
 from torchvision import models
 import random
@@ -70,28 +72,21 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 @torch.no_grad()
 def eval_model(net, loader, audit=False):
     net.eval()
+    all_losses = []
     if audit:
         criterion = torch.nn.CrossEntropyLoss(reduction='none')  # get per-sample loss for audit
-        all_losses = []
-    else:
-        criterion = torch.nn.CrossEntropyLoss(reduction='sum')
-        all_losses = 0
     total, correct = 0, 0
-    for i, data in enumerate(loader):
-        inputs, labels = data
-        inputs = inputs.to(device)
+    for images, labels in loader:
+        images = images.to(device)
         labels = labels.to(device)
-        outputs = net(inputs)
-        _, predicted = torch.max(outputs, 1)
+        outputs = net(images)
+        _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
-        t_loss = criterion(outputs, labels)
-        t_loss = torch_to_np(t_loss)
         if audit:
+            t_loss = criterion(outputs, labels)
+            t_loss = torch_to_np(t_loss)
             all_losses.extend(t_loss)
-        else:
-            all_losses += float(t_loss)
-            all_losses /= len(loader.dataset)
     acc = correct / total
     return acc, all_losses
 
@@ -142,12 +137,33 @@ def eval_stu_model(net, loader):
 
 
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    # net = CNNCifar().to(device)
-    # net = ResNet18().to(device)
     layers = [3, 4, 6, 3]
-    net = ResNet(Bottleneck, layers).to(device)  # ResNet18 [in + 16 + out]
+    net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
+
+    # for epoch in range(args.n_epoch):
+    #     for i, (images, labels) in enumerate(train_loader):
+    #         images = images.to(device)
+    #         labels = labels.to(device)
+    #
+    #         # Forward pass
+    #         outputs = net(images)
+    #         loss = criterion(outputs, labels)
+    #
+    #         # Backward and optimize
+    #         optimizer.zero_grad()
+    #         loss.backward()
+    #         optimizer.step()
+    #         del images, labels, outputs
+    #         torch.cuda.empty_cache()
+    #         gc.collect()
+    #
+    #     print('Epoch [{}/{}], Loss: {:.4f}'
+    #           .format(epoch + 1, args.n_epoch, loss.item()))
+    #
+    #     test_acc, t_loss = eval_model(net, test_loader, audit=False)
+    #     print('Accuracy of the network on the test images: {} %'.format(100 * test_acc))
 
     if args.audit:
         # compute initial loss value as auditing score baseline (optional)
@@ -161,32 +177,36 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
     step_counter = 0
     for epoch in tqdm(range(args.n_epoch)):
         net.train()
-        for i, data in tqdm(enumerate(train_loader)):
-            inputs, labels = data
-            inputs = inputs.to(device)
+        for i, (images, labels) in enumerate(train_loader):
+            images = images.to(device)
             labels = labels.to(device)
-            optimizer.zero_grad()
-            outputs = net(inputs)
+            # Forward pass
+            outputs = net(images)
             loss = criterion(outputs, labels)
+            # Backward and optimize
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            del images, labels, outputs
+            torch.cuda.empty_cache()
+            gc.collect()
             step_counter += 1
-            print("Step {}".format(step_counter))
 
             if step_counter % args.eval_every == 0:
                 # train_stats
                 train_acc, _ = eval_model(net, train_loader, audit=False)
-                clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
-                mem_acc, _ = eval_model(net, mem_loader, audit=False)
-                non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
+                # clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
+                # mem_acc, _ = eval_model(net, mem_loader, audit=False)
+                # non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
                 train_metric = {
                     'epoch': epoch, 'step': step_counter,
                     'train_loss': float(torch_to_np(loss)), 'train_acc': float(train_acc),
-                    'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
-                    'non_mem_acc': float(non_mem_acc)
+                    # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
+                    # 'non_mem_acc': float(non_mem_acc)
                 }
                 if not args.debug:
                     wandb.log(train_metric)
+                print(train_metric)
 
                 # test_stats
                 test_acc, t_loss = eval_model(net, test_loader, audit=False)
@@ -196,6 +216,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                 }
                 if not args.debug:
                     wandb.log(test_metric)
+                print(test_metric)
 
                 # audit_stats
                 if args.audit:
@@ -395,9 +416,8 @@ def main():
         wandb.login()
         run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
 
-    # load cifar10 data
     normalize = transforms.Normalize(
-        mean=[0.5, 0.5, 0.5],  # There are three values because
+        mean=[0.5, 0.5, 0.5],  #  There are three values because
         std=[0.2, 0.2, 0.2],  # there are 3 channels R, G, B
     )
 
@@ -420,8 +440,16 @@ def main():
 
     if args.train_proportion == 1:
         train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
     else:
+        # num_train = len(train_data)
+        # indices = list(range(num_train))
+        # split = int(np.floor(args.train_proportion * num_train))
+        # np.random.seed(args.seed)
+        # np.random.shuffle(indices)
+        # train_1_idx, _ = indices[split:], indices[:split]
+        # train_sampler = SubsetRandomSampler(train_1_idx)
+        # train_loader = torch.utils.data.DataLoader(
+        #     train_data, batch_size=args.batch_size, sampler=train_sampler)
         targets = train_data.targets
         target_indices = np.arange(len(targets))
         train_1_idx, train_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
@@ -429,15 +457,15 @@ def main():
         train_data_sub.targets = [train_data.targets[i] for i in train_1_idx]
         train_data_sub.data = [train_data.data[i] for i in train_1_idx]
         # # down size test set size too
-        targets = test_data.targets
-        target_indices = np.arange(len(targets))
-        test_1_idx, test_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
-        test_data_sub = Subset(test_data, test_1_idx)
-        test_data_sub.targets = [test_data.targets[i] for i in test_1_idx]
-        test_data_sub.data = [test_data.data[i] for i in test_1_idx]
-
+        # targets = test_data.targets
+        # target_indices = np.arange(len(targets))
+        # test_1_idx, test_2_idx = train_test_split(target_indices, train_size=args.train_proportion, stratify=targets, random_state=1024)
+        # test_data_sub = Subset(test_data, test_1_idx)
+        # test_data_sub.targets = [test_data.targets[i] for i in test_1_idx]
+        # test_data_sub.data = [test_data.data[i] for i in test_1_idx]
         train_loader = torch.utils.data.DataLoader(train_data_sub, batch_size=args.batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(test_data_sub, batch_size=args.batch_size, shuffle=True)
+
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
     # # create canaries
     # targets = train_data_sub.targets
