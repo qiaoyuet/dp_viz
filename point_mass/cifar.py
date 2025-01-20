@@ -142,29 +142,6 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
-    # for epoch in range(args.n_epoch):
-    #     for i, (images, labels) in enumerate(train_loader):
-    #         images = images.to(device)
-    #         labels = labels.to(device)
-    #
-    #         # Forward pass
-    #         outputs = net(images)
-    #         loss = criterion(outputs, labels)
-    #
-    #         # Backward and optimize
-    #         optimizer.zero_grad()
-    #         loss.backward()
-    #         optimizer.step()
-    #         del images, labels, outputs
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #
-    #     print('Epoch [{}/{}], Loss: {:.4f}'
-    #           .format(epoch + 1, args.n_epoch, loss.item()))
-    #
-    #     test_acc, t_loss = eval_model(net, test_loader, audit=False)
-    #     print('Accuracy of the network on the test images: {} %'.format(100 * test_acc))
-
     if args.audit:
         # compute initial loss value as auditing score baseline (optional)
         # make sure shuffle is False in data loaders
@@ -240,10 +217,11 @@ def priv_noise_lambda(step):
 
 
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    net = CNNSmall().to(device)
+    layers = [3, 4, 6, 3]
+    net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
     net = ModuleValidator.fix(net)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr)
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
     privacy_engine = PrivacyEngine(accountant='prv')
 
@@ -268,7 +246,7 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
             max_grad_norm=args.dp_C,
         )
         if not args.debug: wandb.log({'dp_noise_multiplier': optimizer.noise_multiplier})
-    scheduler = LambdaNoise(optimizer, noise_lambda=priv_noise_lambda)
+    # scheduler = LambdaNoise(optimizer, noise_lambda=priv_noise_lambda)
 
     if args.audit:
         # compute initial loss value as auditing score baseline (optional)
@@ -282,32 +260,36 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
     step_counter = 0
     for epoch in tqdm(range(args.n_epoch)):
         net.train()
-        for i, data in tqdm(enumerate(train_loader)):
-            net.train()  # opacus issue: if not added every time it returns activation list empty error
-            inputs, labels = data
-            inputs = inputs.to(device)
+        for i, (images, labels) in enumerate(train_loader):
+            net.train()
+            images = images.to(device)
             labels = labels.to(device)
-            optimizer.zero_grad()
-            net.zero_grad()  # opacus issue: memory leak
-            outputs = net(inputs)
+            # Forward pass
+            outputs = net(images)
             loss = criterion(outputs, labels)
+            # Backward and optimize
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            del images, labels, outputs
+            torch.cuda.empty_cache()
+            gc.collect()
             step_counter += 1
 
             if step_counter % args.eval_every == 0:
                 # train_stats
                 epsilon = privacy_engine.get_epsilon(args.delta)
                 train_acc, _ = eval_model(net, train_loader, audit=False)
-                clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
-                mem_acc, _ = eval_model(net, mem_loader, audit=False)
-                non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
+                # clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
+                # mem_acc, _ = eval_model(net, mem_loader, audit=False)
+                # non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
                 train_metric = {
                     'epoch': epoch, 'step': step_counter,
                     'train_loss': float(torch_to_np(loss)), 'train_acc': float(train_acc),
-                    'dp_eps': epsilon, 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
-                    'non_mem_acc': float(non_mem_acc), 'schedule_noise_multiplier': float(optimizer.noise_multiplier)
+                    'dp_eps': epsilon,
+                    # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
+                    # 'non_mem_acc': float(non_mem_acc),
+                    # 'schedule_noise_multiplier': float(optimizer.noise_multiplier)
                 }
                 if not args.debug:
                     wandb.log(train_metric)
