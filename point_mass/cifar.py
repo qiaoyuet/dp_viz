@@ -171,6 +171,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
             loss.backward()
             optimizer.step()
             step_counter += 1
+            print("Step {}".format(step_counter))
 
             if step_counter % args.eval_every == 0:
                 # train_stats
