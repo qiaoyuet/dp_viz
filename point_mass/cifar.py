@@ -145,7 +145,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
     # net = CNNCifar().to(device)
     # net = ResNet18().to(device)
     layers = [3, 4, 6, 3]
-    net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
+    net = ResNet(Bottleneck, layers).to(device)  # ResNet18 [in + 16 + out]
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
