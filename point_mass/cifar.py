@@ -6,7 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data.sampler import SubsetRandomSampler
 from resnet import ResNet, Bottleneck
-from torchvision import models
+import torchvision.models as models
 import random
 from collections import Counter
 import matplotlib
@@ -64,6 +64,7 @@ parser.add_argument('--alpha', default=0.1, type=float, help='distillation loss 
 parser.add_argument('--stu_hidden_size', default=32, type=int)
 parser.add_argument('--stu_num_hidden', default=32, type=int)
 parser.add_argument('--stu_num_out_channels', default=2, type=int)
+parser.add_argument('--pretrain', action='store_true')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -137,10 +138,23 @@ def eval_stu_model(net, loader):
 
 
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    layers = [3, 4, 6, 3]
-    net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
+    if args.pretrain:
+        net = models.resnet18(pretrained=True)
+        for param in net.parameters():
+            param.requires_grad = False
+        net.fc = torch.nn.Linear(512, 10)
+        net = net.to(device)
+        params_to_update = []
+        for name, param in net.named_parameters():
+            if param.requires_grad == True:
+                params_to_update.append(param)
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(params_to_update, lr=args.lr, weight_decay=0.001, momentum=0.9)
+    else:
+        layers = [3, 4, 6, 3]
+        net = ResNet(Bottleneck, layers).to(device)  # ResNet18 [in + 16 + out]
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
     if args.audit:
         # compute initial loss value as auditing score baseline (optional)
@@ -181,8 +195,6 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
                     # 'non_mem_acc': float(non_mem_acc)
                 }
-                if not args.debug:
-                    wandb.log(train_metric)
                 print(train_metric)
 
                 # test_stats
@@ -191,9 +203,13 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     'test_acc': float(test_acc),
                     'test_loss': float(np.mean(np.array(t_loss)))
                 }
-                if not args.debug:
-                    wandb.log(test_metric)
                 print(test_metric)
+
+                if not args.debug:
+                    metrics = {}
+                    metrics.update(train_metric)
+                    metrics.update(test_metric)
+                    wandb.log(metrics)
 
                 # audit_stats
                 if args.audit:
@@ -209,19 +225,40 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                 save_model(net, step_counter, args.save_path, args.exp_name)
 
 
-def priv_noise_lambda(step):
-    if step < 2000:
-        return 100
+def priv_noise_lambda_1(step):
+    if step < 100:
+        return 3
+    else:
+        return 0.5
+
+
+def priv_noise_lambda_2(step):
+    if step < 100:
+        return 0.5
     else:
         return 50
 
 
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    layers = [3, 4, 6, 3]
-    net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
-    net = ModuleValidator.fix(net)
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
+    if args.pretrain:
+        net = models.resnet18(pretrained=True)
+        # net = ModuleValidator.fix(net)
+        for param in net.parameters():
+            param.requires_grad = False
+        net.fc = torch.nn.Linear(512, 10)
+        net = net.to(device)
+        params_to_update = []
+        for name, param in net.named_parameters():
+            if param.requires_grad == True:
+                params_to_update.append(param)
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(params_to_update, lr=args.lr, weight_decay=0.001, momentum=0.9)
+    else:
+        layers = [3, 4, 6, 3]
+        net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
+        net = ModuleValidator.fix(net)
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
     privacy_engine = PrivacyEngine(accountant='prv')
 
@@ -271,6 +308,7 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # scheduler.step()
             del images, labels, outputs
             torch.cuda.empty_cache()
             gc.collect()
@@ -289,10 +327,8 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                     'dp_eps': epsilon,
                     # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
                     # 'non_mem_acc': float(non_mem_acc),
-                    # 'schedule_noise_multiplier': float(optimizer.noise_multiplier)
+                    'schedule_noise_multiplier': float(optimizer.noise_multiplier)
                 }
-                if not args.debug:
-                    wandb.log(train_metric)
 
                 # test_stats
                 test_acc, t_loss = eval_model(net, test_loader, audit=False)
@@ -300,8 +336,12 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                     'test_acc': float(test_acc),
                     'test_loss': float(np.mean(np.array(t_loss)))
                 }
+
                 if not args.debug:
-                    wandb.log(test_metric)
+                    metrics = {}
+                    metrics.update(train_metric)
+                    metrics.update(test_metric)
+                    wandb.log(metrics)
 
                 # audit_stats
                 if args.audit:
@@ -398,17 +438,14 @@ def main():
         wandb.login()
         run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
 
-    normalize = transforms.Normalize(
-        mean=[0.5, 0.5, 0.5],  #  There are three values because
-        std=[0.2, 0.2, 0.2],  # there are 3 channels R, G, B
-    )
-
-    # define transforms
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),  # Same size as the paper
-        transforms.ToTensor(),
-        normalize,
-    ])
+    transform = transforms.Compose(
+        [
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
 
     train_data = torchvision.datasets.CIFAR10(root=args.data_path, train=True,
                                               download=True, transform=transform)
