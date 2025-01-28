@@ -45,6 +45,7 @@ parser.add_argument('--audit_proportion', default=0.1, type=float)
 parser.add_argument('--no_plot', action='store_true')
 parser.add_argument('--exp_group', default='tmp', type=str)
 parser.add_argument('--exp_name', default='tmp', type=str)
+parser.add_argument('--exp_name_load', default='tmp', type=str)
 parser.add_argument('--data_path', default='/home/qiaoyuet/project/data', type=str)
 parser.add_argument('--save_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim_cifar', type=str)
 parser.add_argument('--l2_reg', default=0.0, type=float)
@@ -239,7 +240,7 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
         net = ResNet(Bottleneck, layers).to(device)
         # use the same model as with DP
         net = ModuleValidator.fix(net)
-        net = load_priv_model(args.save_path, net, args.exp_name, args.load_step, device=device)
+        net = load_priv_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
     # if args.pretrain:
