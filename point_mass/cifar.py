@@ -138,21 +138,31 @@ def eval_stu_model(net, loader):
 
 
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    if args.pretrain:
-        net = models.resnet18(pretrained=True)
-        for param in net.parameters():
-            param.requires_grad = False
-        net.fc = torch.nn.Linear(512, 10)
-        net = net.to(device)
-        params_to_update = []
-        for name, param in net.named_parameters():
-            if param.requires_grad == True:
-                params_to_update.append(param)
+    if args.load_step > 0:
+        layers = [3, 4, 6, 3]
+        net = ResNet(Bottleneck, layers).to(device)
+        # use the same model as with DP
+        net = ModuleValidator.fix(net)
+        net = load_model(args.save_path, net, args.exp_name, args.load_step, device=device)
         criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.SGD(params_to_update, lr=args.lr, weight_decay=0.001, momentum=0.9)
+        optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
+    # if args.pretrain:
+    #     net = models.resnet18(pretrained=True)
+    #     for param in net.parameters():
+    #         param.requires_grad = False
+    #     net.fc = torch.nn.Linear(512, 10)
+    #     net = net.to(device)
+    #     params_to_update = []
+    #     for name, param in net.named_parameters():
+    #         if param.requires_grad == True:
+    #             params_to_update.append(param)
+    #     criterion = torch.nn.CrossEntropyLoss()
+    #     optimizer = torch.optim.SGD(params_to_update, lr=args.lr, weight_decay=0.001, momentum=0.9)
     else:
         layers = [3, 4, 6, 3]
         net = ResNet(Bottleneck, layers).to(device)  # ResNet18 [in + 16 + out]
+        # use the same model as with DP
+        net = ModuleValidator.fix(net)
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
 
@@ -183,7 +193,8 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
             gc.collect()
             step_counter += 1
 
-            if step_counter % args.eval_every == 0:
+            if step_counter % args.eval_every == 0 or (args.save_mode and int(step_counter) in save_steps):
+                metrics = {}
                 # train_stats
                 train_acc, _ = eval_model(net, train_loader, audit=False)
                 # clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
@@ -195,7 +206,6 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
                     # 'non_mem_acc': float(non_mem_acc)
                 }
-                print(train_metric)
 
                 # test_stats
                 test_acc, t_loss = eval_model(net, test_loader, audit=False)
@@ -203,13 +213,9 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     'test_acc': float(test_acc),
                     'test_loss': float(np.mean(np.array(t_loss)))
                 }
-                print(test_metric)
 
-                if not args.debug:
-                    metrics = {}
-                    metrics.update(train_metric)
-                    metrics.update(test_metric)
-                    wandb.log(metrics)
+                metrics.update(train_metric)
+                metrics.update(test_metric)
 
                 # audit_stats
                 if args.audit:
@@ -218,41 +224,37 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                     non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
-                    if not args.debug:
-                        wandb.log(audit_metrics)
+                    metrics.update(audit_metrics)
 
-            if args.save_mode and int(step_counter) in save_steps:
-                save_model(net, step_counter, args.save_path, args.exp_name)
+                if not args.debug:
+                    wandb.log(metrics)
 
-
-def priv_noise_lambda_1(step):
-    if step < 100:
-        return 3
-    else:
-        return 0.5
-
-
-def priv_noise_lambda_2(step):
-    if step < 100:
-        return 0.5
-    else:
-        return 50
+                if args.save_mode and int(step_counter) in save_steps:
+                    save_model(net, step_counter, args.save_path, args.exp_name)
 
 
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
-    if args.pretrain:
-        net = models.resnet18(pretrained=True)
-        # net = ModuleValidator.fix(net)
-        for param in net.parameters():
-            param.requires_grad = False
-        net.fc = torch.nn.Linear(512, 10)
-        net = net.to(device)
-        params_to_update = []
-        for name, param in net.named_parameters():
-            if param.requires_grad == True:
-                params_to_update.append(param)
+    if args.load_step > 0:
+        layers = [3, 4, 6, 3]
+        net = ResNet(Bottleneck, layers).to(device)
+        # use the same model as with DP
+        net = ModuleValidator.fix(net)
+        net = load_priv_model(args.save_path, net, args.exp_name, args.load_step, device=device)
         criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.SGD(params_to_update, lr=args.lr, weight_decay=0.001, momentum=0.9)
+        optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
+    # if args.pretrain:
+    #     net = models.resnet18(pretrained=True)
+    #     # net = ModuleValidator.fix(net)
+    #     for param in net.parameters():
+    #         param.requires_grad = False
+    #     net.fc = torch.nn.Linear(512, 10)
+    #     net = net.to(device)
+    #     params_to_update = []
+    #     for name, param in net.named_parameters():
+    #         if param.requires_grad == True:
+    #             params_to_update.append(param)
+    #     criterion = torch.nn.CrossEntropyLoss()
+    #     optimizer = torch.optim.SGD(params_to_update, lr=args.lr, weight_decay=0.001, momentum=0.9)
     else:
         layers = [3, 4, 6, 3]
         net = ResNet(Bottleneck, layers).to(device) # ResNet18 [in + 16 + out]
@@ -314,7 +316,8 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
             gc.collect()
             step_counter += 1
 
-            if step_counter % args.eval_every == 0:
+            if step_counter % args.eval_every == 0 or (args.save_mode and int(step_counter) in save_steps):
+                metrics = {}
                 # train_stats
                 epsilon = privacy_engine.get_epsilon(args.delta)
                 train_acc, _ = eval_model(net, train_loader, audit=False)
@@ -337,11 +340,8 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                     'test_loss': float(np.mean(np.array(t_loss)))
                 }
 
-                if not args.debug:
-                    metrics = {}
-                    metrics.update(train_metric)
-                    metrics.update(test_metric)
-                    wandb.log(metrics)
+                metrics.update(train_metric)
+                metrics.update(test_metric)
 
                 # audit_stats
                 if args.audit:
@@ -350,11 +350,13 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                     mem_losses = np.array(cur_mem_losses) - np.array(init_mem_losses)
                     non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
-                    if not args.debug:
-                        wandb.log(audit_metrics)
+                    metrics.update(audit_metrics)
 
-            if args.save_mode and int(step_counter) in save_steps:
-                save_model(net, step_counter, args.save_path, args.exp_name)
+                if not args.debug:
+                    wandb.log(metrics)
+
+                if args.save_mode and int(step_counter) in save_steps:
+                    save_model(net, step_counter, args.save_path, args.exp_name)
 
 
 # Distillation loss function for regression

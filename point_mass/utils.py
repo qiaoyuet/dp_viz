@@ -196,20 +196,20 @@ def save_model(model, step_num, model_path, exp_name):
     torch.save(model.state_dict(), os.path.join(save_path2, 's_{}.pt'.format(step_num)))
 
 
-def load_model(load_path, exp_name, load_step, device='cuda'):
+def load_model(load_path, model, exp_name, load_step, device='cuda'):
     model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
     # model = Net().to(device)
-    model = CNNSmall().to(device)
+    # model = CNNSmall().to(device)
     model.load_state_dict(torch.load(model_path, weights_only=True))
-    model.eval()
+    # model.eval()
     return model
 
 
-def load_priv_model(load_path, exp_name, load_step, device='cuda'):
+def load_priv_model(load_path, model, exp_name, load_step, device='cuda'):
     model_path = os.path.join(load_path, exp_name, 'ckpt', 's_{}.pt'.format(load_step))
     # model = Net().to(device)
-    model = CNNSmall().to(device)
-    model = ModuleValidator.fix(model)
+    # model = CNNSmall().to(device)
+    # model = ModuleValidator.fix(model)
 
     # priv engine changes module names, needs to change back when loading
     loaded_model = torch.load(model_path, weights_only=True)
@@ -221,7 +221,7 @@ def load_priv_model(load_path, exp_name, load_step, device='cuda'):
         new_state_dict[name] = v
 
     model.load_state_dict(new_state_dict)
-    model.eval()
+    # model.eval()
     return model
 
 
