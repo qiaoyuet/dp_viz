@@ -54,6 +54,7 @@ parser.add_argument('--delta', default=1e-5, type=float)
 parser.add_argument('--dp_C', default=1., type=float)
 parser.add_argument('--dp_noise', default=-1., type=float)
 parser.add_argument('--non_priv', action='store_true')
+parser.add_argument('--load_non_priv', action='store_true')
 parser.add_argument('--save_mode', action='store_true')
 parser.add_argument('--save_at_step', default="10,50,100,150,200,600,1000")
 parser.add_argument('--distill', action='store_true')
@@ -144,7 +145,10 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
         net = ResNet(Bottleneck, layers).to(device)
         # use the same model as with DP
         net = ModuleValidator.fix(net)
-        net = load_model(args.save_path, net, args.exp_name, args.load_step, device=device)
+        if args.load_non_priv:
+            net = load_model(args.save_path, net, args.exp_name, args.load_step, device=device)
+        else:
+            net = load_priv_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
     # if args.pretrain:
@@ -240,7 +244,10 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
         net = ResNet(Bottleneck, layers).to(device)
         # use the same model as with DP
         net = ModuleValidator.fix(net)
-        net = load_priv_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
+        if args.load_non_priv:
+            net = load_model(args.save_path, net, args.exp_name, args.load_step, device=device)
+        else:
+            net = load_priv_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
     # if args.pretrain:
