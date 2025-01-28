@@ -142,13 +142,22 @@ def eval_stu_model(net, loader):
 def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
     if args.load_step > 0:
         layers = [3, 4, 6, 3]
-        net = ResNet(Bottleneck, layers).to(device)
+        net = ResNet(Bottleneck, layers)
         # use the same model as with DP
         net = ModuleValidator.fix(net)
         if args.load_non_priv:
-            net = load_model(args.save_path, net, args.exp_name, args.load_step, device=device)
+            net = load_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
         else:
             net = load_priv_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
+        # freeze loaded model
+        for param in net.parameters():
+            param.requires_grad = False
+        net.fc = torch.nn.Linear(512, 10)
+        net = net.to(device)
+        params_to_update = []
+        for name, param in net.named_parameters():
+            if param.requires_grad == True:
+                params_to_update.append(param)
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
     # if args.pretrain:
@@ -241,13 +250,22 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
     if args.load_step > 0:
         layers = [3, 4, 6, 3]
-        net = ResNet(Bottleneck, layers).to(device)
+        net = ResNet(Bottleneck, layers)
         # use the same model as with DP
         net = ModuleValidator.fix(net)
         if args.load_non_priv:
-            net = load_model(args.save_path, net, args.exp_name, args.load_step, device=device)
+            net = load_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
         else:
             net = load_priv_model(args.save_path, net, args.exp_name_load, args.load_step, device=device)
+        # freeze loaded model
+        for param in net.parameters():
+            param.requires_grad = False
+        net.fc = torch.nn.Linear(512, 10)
+        net = net.to(device)
+        params_to_update = []
+        for name, param in net.named_parameters():
+            if param.requires_grad == True:
+                params_to_update.append(param)
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, weight_decay=0.001, momentum=0.9)
     # if args.pretrain:
@@ -329,15 +347,15 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                 # train_stats
                 epsilon = privacy_engine.get_epsilon(args.delta)
                 train_acc, _ = eval_model(net, train_loader, audit=False)
-                # clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
-                # mem_acc, _ = eval_model(net, mem_loader, audit=False)
-                # non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
+                clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
+                mem_acc, _ = eval_model(net, mem_loader, audit=False)
+                non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
                 train_metric = {
                     'epoch': epoch, 'step': step_counter,
                     'train_loss': float(torch_to_np(loss)), 'train_acc': float(train_acc),
                     'dp_eps': epsilon,
-                    # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
-                    # 'non_mem_acc': float(non_mem_acc),
+                    'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
+                    'non_mem_acc': float(non_mem_acc),
                     'schedule_noise_multiplier': float(optimizer.noise_multiplier)
                 }
 
@@ -496,7 +514,7 @@ def main():
 
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
-    # # create canaries
+    # create canaries
     # targets = train_data_sub.targets
     # target_indices = np.arange(len(targets))
     # train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
