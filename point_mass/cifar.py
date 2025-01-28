@@ -464,7 +464,8 @@ def train_student(teacher, train_loader, test_loader, mem_loader, non_mem_loader
 def main():
     if not args.debug:
         wandb.login()
-        run = wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name)
+        wandb.init(project="dp_viz", group=args.exp_group, name=args.exp_name,
+                   settings=wandb.Settings(_disable_stats=True))
 
     transform = transforms.Compose(
         [
