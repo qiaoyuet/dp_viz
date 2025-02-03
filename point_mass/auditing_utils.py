@@ -85,9 +85,9 @@ def generate_auditing_data(train_data, audit_size, seed):
     mem_index = audit_index[np.where(bernoulli_index == 1)]
     new_train_index = list(mem_index) + non_sampled_index
     # split data
-    new_train = np.array(train_data)[np.array(new_train_index)]
-    mem_data = np.array(train_data)[np.array(mem_index)]
-    non_mem_data = np.array(train_data)[np.array(non_mem_index)]
+    new_train = [train_data[i] for i in new_train_index]
+    mem_data = [train_data[i] for i in mem_index]
+    non_mem_data = [train_data[i] for i in non_mem_index]
     return new_train, mem_data, non_mem_data
 
 
@@ -338,6 +338,7 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     correct_predictions = 0
     best_eps = 0
     p = 0.05
+    mia_predictions = np.array([-1] * len(all_losses))
     for t_pos in tqdm(threshold_range, disable=True):
         positive_predictions = all_losses[all_losses <= t_pos]
         if len(positive_predictions) == 0:
@@ -376,6 +377,8 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
                     best_t_neg = t_neg
                     total_predictions = r
                     correct_predictions = v
+                    mia_predictions[((all_losses <= best_t_pos) & (all_labels == 1)).squeeze()] = 1
+                    mia_predictions[((all_losses >= t_neg) & (all_labels == 0)).squeeze()] = 0
                 if accuracy > best_accuracy:
                     best_accuracy = accuracy
 
@@ -392,7 +395,8 @@ def find_O1_pred(member_loss_values, non_member_loss_values, delta=0.):
     metric = {
         'best_eps': best_eps, 'threshold_t_neg': best_t_neg, 'threshold_t_pos': best_t_pos,
         'best_precision': best_precision, 'best_accuracy': best_accuracy,
-        'total_predictions': total_predictions, 'correct_predictions': correct_predictions
+        'total_predictions': total_predictions, 'correct_predictions': correct_predictions,
+        'mia_predictions': mia_predictions
     }
     # print(f"Best eps: {best_eps} with thresholds (t_neg, t_pos): ({best_t_neg}, {best_t_pos})")
     # print(f"Best precision for t_pos: {best_precision} with t_pos: {best_t_pos}")

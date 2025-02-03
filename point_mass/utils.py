@@ -191,7 +191,7 @@ def save_model(model, step_num, model_path, exp_name):
     save_path = os.path.join(model_path, exp_name)
     if not os.path.isdir(save_path):
         os.mkdir(save_path)
-        os.mkdir(os.path.join(model_path, exp_name, 'ckpt'))
+    os.makedirs(os.path.join(model_path, exp_name, 'ckpt'), exist_ok=True)
     save_path2 = os.path.join(model_path, exp_name, 'ckpt')
     torch.save(model.state_dict(), os.path.join(save_path2, 's_{}.pt'.format(step_num)))
 

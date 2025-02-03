@@ -188,6 +188,13 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
 
     if args.save_mode:
         save_steps = [int(item) for item in args.save_at_step.split(',')]
+        save_path = os.path.join(args.save_path, args.exp_name)
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+        write_path = os.path.join(save_path, 'mia_predictions.txt')
+        if os.path.exists(write_path):
+            os.remove(write_path)
+        out_file = open(write_path, "w")
 
     step_counter = 0
     for epoch in tqdm(range(args.n_epoch)):
@@ -211,14 +218,14 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                 metrics = {}
                 # train_stats
                 train_acc, _ = eval_model(net, train_loader, audit=False)
-                # clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
-                # mem_acc, _ = eval_model(net, mem_loader, audit=False)
-                # non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
+                clean_train_acc, _ = eval_model(net, clean_train_loader, audit=False)
+                mem_acc, _ = eval_model(net, mem_loader, audit=False)
+                non_mem_acc, _ = eval_model(net, non_mem_loader, audit=False)
                 train_metric = {
                     'epoch': epoch, 'step': step_counter,
                     'train_loss': float(torch_to_np(loss)), 'train_acc': float(train_acc),
-                    # 'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
-                    # 'non_mem_acc': float(non_mem_acc)
+                    'clean_train_acc': float(clean_train_acc), 'mem_acc': float(mem_acc),
+                    'non_mem_acc': float(non_mem_acc)
                 }
 
                 # test_stats
@@ -239,12 +246,16 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                     metrics.update(audit_metrics)
+                    tmp_string = "Step {}: ".format(step_counter) + np.array2string(audit_metrics['mia_predictions']) + "\n"
+                    if args.save_mode: out_file.write(tmp_string)
 
                 if not args.debug:
                     wandb.log(metrics)
 
                 if args.save_mode and int(step_counter) in save_steps:
                     save_model(net, step_counter, args.save_path, args.exp_name)
+
+    if args.save_mode: out_file.close()
 
 
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
@@ -516,28 +527,30 @@ def main():
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
     # create canaries
-    # targets = train_data_sub.targets
-    # target_indices = np.arange(len(targets))
-    # train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
-    # canary_sub = Subset(train_data_sub, canary_idx)
-    # orig_targets = [train_data_sub.targets[i] for i in canary_idx]
-    # # idx = torch.randperm(torch.tensor(orig_targets).nelement())
-    # # new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
-    # # canary_sub.targets = new_targets
-    # canary_sub.targets = orig_targets  # no label noise
-    # canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
-    # new_train_sub = Subset(train_data_sub, train_idx)
-    # mem_data, non_mem_data = torch.utils.data.random_split(
-    #     canary_sub, [0.5, 0.5],
-    #     generator=torch.Generator().manual_seed(1024))
-    # new_train_data = torch.utils.data.ConcatDataset([new_train_sub, mem_data])
-    # train_loader = torch.utils.data.DataLoader(new_train_data, batch_size=args.batch_size, shuffle=True)
-    # clean_train_loader = torch.utils.data.DataLoader(new_train_sub, batch_size=args.batch_size, shuffle=True)  # clean train
-    # mem_loader = torch.utils.data.DataLoader(mem_data, batch_size=args.batch_size, shuffle=True)  # noisy train
-    # non_mem_loader = torch.utils.data.DataLoader(non_mem_data, batch_size=args.batch_size, shuffle=True)  # noisy test
-    # if not args.debug:
-    #     wandb.log({'num_mem': len(mem_data), 'num_non_mem': len(non_mem_data)})
-    mem_loader, non_mem_loader, clean_train_loader = train_loader, train_loader, train_loader
+    targets = train_data_sub.targets
+    target_indices = np.arange(len(targets))
+    train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
+    canary_sub = Subset(train_data_sub, canary_idx)
+    orig_targets = [train_data_sub.targets[i] for i in canary_idx]
+    # with noisy labels
+    # idx = torch.randperm(torch.tensor(orig_targets).nelement())
+    # new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
+    # canary_sub.targets = new_targets
+    # no label noise
+    canary_sub.targets = orig_targets
+    canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
+    new_train_sub = Subset(train_data_sub, train_idx)
+    mem_data, non_mem_data = torch.utils.data.random_split(
+        canary_sub, [0.5, 0.5],
+        generator=torch.Generator().manual_seed(1024))
+    new_train_data = torch.utils.data.ConcatDataset([new_train_sub, mem_data])
+    train_loader = torch.utils.data.DataLoader(new_train_data, batch_size=args.batch_size, shuffle=True)
+    clean_train_loader = torch.utils.data.DataLoader(new_train_sub, batch_size=args.batch_size, shuffle=True)  # clean train
+    mem_loader = torch.utils.data.DataLoader(mem_data, batch_size=args.batch_size, shuffle=False)  # noisy train
+    non_mem_loader = torch.utils.data.DataLoader(non_mem_data, batch_size=args.batch_size, shuffle=False)  # noisy test
+    if not args.debug:
+        wandb.log({'num_mem': len(mem_data), 'num_non_mem': len(non_mem_data)})
+    # mem_loader, non_mem_loader, clean_train_loader = train_loader, train_loader, train_loader
 
     # set seed
     np.random.seed(args.seed)
