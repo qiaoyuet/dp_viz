@@ -40,6 +40,7 @@ parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--eval_every', default=1, type=int)
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--audit', action='store_true')
+parser.add_argument('--with_label_noise', action='store_true')
 parser.add_argument('--train_proportion', default=0.1, type=float)
 parser.add_argument('--audit_proportion', default=0.1, type=float)
 parser.add_argument('--no_plot', action='store_true')
@@ -247,6 +248,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                     metrics.update(audit_metrics)
                     tmp_string = "Step {}: ".format(step_counter) + np.array2string(audit_metrics['mia_predictions']) + "\n"
+                    print(tmp_string)
                     if args.save_mode: out_file.write(tmp_string)
 
                 if not args.debug:
@@ -532,12 +534,14 @@ def main():
     train_idx, canary_idx = train_test_split(target_indices, train_size=(1-args.audit_proportion), stratify=targets, random_state=1024)
     canary_sub = Subset(train_data_sub, canary_idx)
     orig_targets = [train_data_sub.targets[i] for i in canary_idx]
-    # with noisy labels
-    # idx = torch.randperm(torch.tensor(orig_targets).nelement())
-    # new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
-    # canary_sub.targets = new_targets
-    # no label noise
-    canary_sub.targets = orig_targets
+    if args.with_label_noise:
+        # with noisy labels
+        idx = torch.randperm(torch.tensor(orig_targets).nelement())
+        new_targets = torch.tensor(orig_targets).view(-1)[idx].view(torch.tensor(orig_targets).size())
+        canary_sub.targets = new_targets
+    else:
+        # no label noise
+        canary_sub.targets = orig_targets
     canary_sub.data = [train_data_sub.data[i] for i in canary_idx]
     new_train_sub = Subset(train_data_sub, train_idx)
     mem_data, non_mem_data = torch.utils.data.random_split(
