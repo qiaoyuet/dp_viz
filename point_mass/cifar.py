@@ -57,7 +57,7 @@ parser.add_argument('--dp_noise', default=-1., type=float)
 parser.add_argument('--non_priv', action='store_true')
 parser.add_argument('--load_non_priv', action='store_true')
 parser.add_argument('--save_mode', action='store_true')
-parser.add_argument('--save_at_step', default="10,50,100,150,200,600,1000")
+parser.add_argument('--save_at_step', default="0,0")
 parser.add_argument('--distill', action='store_true')
 parser.add_argument('--load_path', default='/home/qiaoyuet/project/dp_viz/point_mass/outputs/sim_mnist', type=str)
 parser.add_argument('--load_exp_name', default='tmp', type=str)
@@ -401,7 +401,7 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                     metrics.update(audit_metrics)
                     tmp_string = "Step {}: ".format(step_counter) + \
-                                 ' '.join([str(i) for i in audit_metrics['mia_predictions']]) + "\n"
+                                 ','.join([str(i) for i in audit_metrics['mia_predictions']]) + "\n"
                     print(tmp_string)
                     out_file.write(tmp_string)
 
