@@ -248,7 +248,8 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                     metrics.update(audit_metrics)
-                    tmp_string = "Step {}: ".format(step_counter) + np.array2string(audit_metrics['mia_predictions']) + "\n"
+                    tmp_string = "Step {}: ".format(step_counter) + \
+                                 ' '.join([str(i) for i in audit_metrics['mia_predictions']]) + "\n"
                     print(tmp_string)
                     out_file.write(tmp_string)
 
