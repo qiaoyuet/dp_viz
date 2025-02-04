@@ -189,13 +189,14 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
 
     if args.save_mode:
         save_steps = [int(item) for item in args.save_at_step.split(',')]
-        save_path = os.path.join(args.save_path, args.exp_name)
-        if not os.path.isdir(save_path):
-            os.mkdir(save_path)
-        write_path = os.path.join(save_path, 'mia_predictions.txt')
-        if os.path.exists(write_path):
-            os.remove(write_path)
-        out_file = open(write_path, "w")
+
+    save_path = os.path.join(args.save_path, args.exp_name)
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+    write_path = os.path.join(save_path, 'mia_predictions.txt')
+    if os.path.exists(write_path):
+        os.remove(write_path)
+    out_file = open(write_path, "w")
 
     step_counter = 0
     for epoch in tqdm(range(args.n_epoch)):
@@ -249,7 +250,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                     metrics.update(audit_metrics)
                     tmp_string = "Step {}: ".format(step_counter) + np.array2string(audit_metrics['mia_predictions']) + "\n"
                     print(tmp_string)
-                    if args.save_mode: out_file.write(tmp_string)
+                    out_file.write(tmp_string)
 
                 if not args.debug:
                     wandb.log(metrics)
@@ -257,7 +258,7 @@ def train(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loa
                 if args.save_mode and int(step_counter) in save_steps:
                     save_model(net, step_counter, args.save_path, args.exp_name)
 
-    if args.save_mode: out_file.close()
+    out_file.close()
 
 
 def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_train_loader):
@@ -390,6 +391,9 @@ def train_priv(train_loader, test_loader, mem_loader, non_mem_loader, clean_trai
                     non_mem_losses = np.array(cur_non_mem_losses) - np.array(init_non_mem_losses)
                     audit_metrics = find_O1_pred(mem_losses, non_mem_losses)
                     metrics.update(audit_metrics)
+                    tmp_string = "Step {}: ".format(step_counter) + np.array2string(
+                        audit_metrics['mia_predictions']) + "\n"
+                    print(tmp_string)
 
                 if not args.debug:
                     wandb.log(metrics)
